@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 import re
 import shutil
@@ -98,7 +99,6 @@ class MembershipDatabase:
     }
 
     def __init__(self) -> None:
-        self.workbook = None
         self.workbook_path: Path | None = None
         self.loaded_mtime_ns: int | None = None
         self.sheet_configs: dict[str, SheetConfig] = {}
@@ -120,17 +120,19 @@ class MembershipDatabase:
         self.clear()
         self.workbook_path = excel_path
         self.loaded_mtime_ns = excel_path.stat().st_mtime_ns
-        self.workbook = openpyxl.load_workbook(excel_path)
-
-        for sheet_name in self.workbook.sheetnames:
-            if "total" in sheet_name.lower():
-                continue
-            sheet = self.workbook[sheet_name]
-            config = self._find_sheet_config(sheet_name, sheet)
-            if not config:
-                continue
-            self.sheet_configs[sheet_name] = config
-            self._load_sheet_records(sheet_name, sheet, config)
+        workbook = openpyxl.load_workbook(excel_path, data_only=True)
+        try:
+            for sheet_name in workbook.sheetnames:
+                if "total" in sheet_name.lower():
+                    continue
+                sheet = workbook[sheet_name]
+                config = self._find_sheet_config(sheet_name, sheet)
+                if not config:
+                    continue
+                self.sheet_configs[sheet_name] = config
+                self._load_sheet_records(sheet_name, sheet, config)
+        finally:
+            workbook.close()
 
         self._rebuild_indexes()
 
@@ -283,8 +285,8 @@ class MembershipDatabase:
     def get_record(self, signature: tuple[str, int]) -> MemberRecord | None:
         return self.by_signature.get(signature)
 
-    def _save_workbook_atomic(self) -> None:
-        if not self.workbook_path or not self.workbook:
+    def _save_workbook_atomic(self, workbook) -> None:
+        if not self.workbook_path:
             raise RuntimeError("No workbook is loaded.")
 
         current_mtime = self.workbook_path.stat().st_mtime_ns
@@ -301,7 +303,7 @@ class MembershipDatabase:
 
         temp_path = self.workbook_path.with_name(f"{self.workbook_path.name}.tmp")
         try:
-            self.workbook.save(temp_path)
+            workbook.save(temp_path)
             os.replace(temp_path, self.workbook_path)
         finally:
             if temp_path.exists():
@@ -314,56 +316,96 @@ class MembershipDatabase:
         if not record:
             raise ValueError("Selected member record was not found.")
 
-        config = self.sheet_configs[record.sheet_name]
-        sheet = self.workbook[record.sheet_name]
-        row = record.row_number
+        if not self.workbook_path:
+            raise RuntimeError("No workbook file path is set.")
 
-        def write_if_present(field: str, value):
-            col = config.index_map.get(field)
-            if col:
-                sheet.cell(row=row, column=col).value = value
+        workbook = openpyxl.load_workbook(self.workbook_path)
+        try:
+            config = self.sheet_configs[record.sheet_name]
+            sheet = workbook[record.sheet_name]
+            row = record.row_number
 
-        if "first_name" in updates:
-            record.first_name = safe_cell_text(str(updates["first_name"]))
-            write_if_present("first_name", record.first_name)
-        if "last_name" in updates:
-            record.last_name = safe_cell_text(str(updates["last_name"]))
-            write_if_present("last_name", record.last_name)
-        if "email" in updates:
-            record.email = safe_cell_text(str(updates["email"]))
-            write_if_present("email", record.email)
-        if "membership_type" in updates:
-            record.membership_type = safe_cell_text(str(updates["membership_type"]))
-            write_if_present("membership_type", record.membership_type)
-        if "membership_number" in updates:
-            record.membership_number = safe_cell_text(str(updates["membership_number"]))
-            write_if_present("membership_number", record.membership_number)
-        if "includes_cart" in updates:
-            record.includes_cart = parse_yes_no(str(updates["includes_cart"]))
-            write_if_present("includes_cart", record.includes_cart)
-        if "includes_range" in updates:
-            record.includes_range = parse_yes_no(str(updates["includes_range"]))
-            write_if_present("includes_range", record.includes_range)
-        if "membership_amount_used" in updates:
-            try:
-                amount = int(str(updates["membership_amount_used"]).strip())
-            except ValueError as exc:
-                raise ValueError("Membership Amount Used must be a whole number.") from exc
-            if amount < 0:
-                raise ValueError("Membership Amount Used cannot be negative.")
-            record.membership_amount_used = amount
-            write_if_present("membership_amount_used", amount)
+            def write_if_present(field: str, value):
+                col = config.index_map.get(field)
+                if col:
+                    sheet.cell(row=row, column=col).value = value
 
-        self._save_workbook_atomic()
+            if "first_name" in updates:
+                record.first_name = safe_cell_text(str(updates["first_name"]))
+                write_if_present("first_name", record.first_name)
+            if "last_name" in updates:
+                record.last_name = safe_cell_text(str(updates["last_name"]))
+                write_if_present("last_name", record.last_name)
+            if "email" in updates:
+                record.email = safe_cell_text(str(updates["email"]))
+                write_if_present("email", record.email)
+            if "membership_type" in updates:
+                record.membership_type = safe_cell_text(str(updates["membership_type"]))
+                write_if_present("membership_type", record.membership_type)
+            if "membership_number" in updates:
+                record.membership_number = safe_cell_text(str(updates["membership_number"]))
+                write_if_present("membership_number", record.membership_number)
+            if "includes_cart" in updates:
+                record.includes_cart = parse_yes_no(str(updates["includes_cart"]))
+                write_if_present("includes_cart", record.includes_cart)
+            if "includes_range" in updates:
+                record.includes_range = parse_yes_no(str(updates["includes_range"]))
+                write_if_present("includes_range", record.includes_range)
+            if "membership_amount_used" in updates:
+                try:
+                    amount = int(str(updates["membership_amount_used"]).strip())
+                except ValueError as exc:
+                    raise ValueError("Membership Amount Used must be a whole number.") from exc
+                if amount < 0:
+                    raise ValueError("Membership Amount Used cannot be negative.")
+                record.membership_amount_used = amount
+                write_if_present("membership_amount_used", amount)
+
+            self._save_workbook_atomic(workbook)
+        finally:
+            workbook.close()
         self._rebuild_indexes()
         return record
+
+    def apply_usage_deltas(self, usage_deltas: dict[tuple[str, int], int]) -> None:
+        if not usage_deltas:
+            return
+        if not self.workbook_path:
+            raise RuntimeError("No workbook file path is set.")
+
+        workbook = openpyxl.load_workbook(self.workbook_path)
+        try:
+            for signature, delta in usage_deltas.items():
+                if delta == 0:
+                    continue
+                record = self.get_record(signature)
+                if not record:
+                    continue
+                config = self.sheet_configs.get(record.sheet_name)
+                if not config:
+                    continue
+                col = config.index_map.get("membership_amount_used")
+                if not col:
+                    continue
+                sheet = workbook[record.sheet_name]
+                current_raw = sheet.cell(row=record.row_number, column=col).value
+                try:
+                    current = int(float(str(current_raw).strip())) if current_raw not in (None, "") else 0
+                except ValueError:
+                    current = 0
+                new_value = max(0, current + delta)
+                sheet.cell(row=record.row_number, column=col).value = new_value
+                record.membership_amount_used = new_value
+
+            self._save_workbook_atomic(workbook)
+        finally:
+            workbook.close()
 
 
 @dataclass
 class ScanEvent:
     signature: tuple[str, int]
-    previous_amount: int
-    new_amount: int
+    delta: int
     scan_value: str
     scanned_at: str
 
@@ -385,8 +427,14 @@ class MembershipApp:
         self.current_selection: tuple[str, int] | None = None
         self.last_scan_events: list[ScanEvent] = []
         self.log_path = self._default_log_path()
+        self.pending_usage_path = self._default_pending_usage_path()
         self.selected_match_id = tk.StringVar(value="")
         self.match_cards: list[ctk.CTkFrame] = []
+        self.pending_usage_counts: dict[tuple[str, int], int] = {}
+        self.pending_usage_last_flush: datetime = datetime.now()
+        self.flush_interval_seconds = 120
+        self.flush_threshold = 20
+        self._flush_job_id: str | None = None
 
         self.detail_vars = {
             "first_name": tk.StringVar(),
@@ -403,6 +451,8 @@ class MembershipApp:
         self._build_ui()
         self._ensure_log_file()
         self._auto_load_default_file()
+        self._schedule_periodic_flush()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def _build_styles(self) -> None:
         ctk.set_appearance_mode("light")
@@ -650,6 +700,9 @@ class MembershipApp:
     def _default_log_path(self) -> Path:
         return self._app_data_dir() / "scan_history.csv"
 
+    def _default_pending_usage_path(self) -> Path:
+        return self._app_data_dir() / "pending_usage.json"
+
     def _ensure_log_file(self) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         if self.log_path.exists():
@@ -672,6 +725,101 @@ class MembershipApp:
                 ]
             )
 
+    def _load_pending_usage(self, excel_path: Path) -> None:
+        self.pending_usage_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.pending_usage_path.exists():
+            self.pending_usage_counts = {}
+            return
+        try:
+            payload = json.loads(self.pending_usage_path.read_text(encoding="utf-8"))
+            payload_excel = str(payload.get("excel_file", ""))
+            if payload_excel != str(excel_path):
+                self.pending_usage_counts = {}
+                return
+            counts: dict[tuple[str, int], int] = {}
+            for key, value in payload.get("counts", {}).items():
+                if "|" not in key:
+                    continue
+                sheet, row_text = key.split("|", 1)
+                row = int(row_text)
+                delta = int(value)
+                if delta != 0:
+                    counts[(sheet, row)] = delta
+            self.pending_usage_counts = counts
+        except Exception:
+            self.pending_usage_counts = {}
+
+    def _save_pending_usage(self) -> None:
+        self.pending_usage_path.parent.mkdir(parents=True, exist_ok=True)
+        serialized = {
+            f"{sheet}|{row}": delta
+            for (sheet, row), delta in self.pending_usage_counts.items()
+            if delta != 0
+        }
+        payload = {
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+            "excel_file": self.excel_path_var.get().strip(),
+            "counts": serialized,
+        }
+        temp = self.pending_usage_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(temp, self.pending_usage_path)
+
+    def _record_pending_delta(self, signature: tuple[str, int], delta: int) -> None:
+        current = self.pending_usage_counts.get(signature, 0)
+        new_val = current + delta
+        if new_val == 0:
+            self.pending_usage_counts.pop(signature, None)
+        else:
+            self.pending_usage_counts[signature] = new_val
+        self._save_pending_usage()
+
+    def _effective_usage_count(self, record: MemberRecord) -> int:
+        return max(0, record.membership_amount_used + self.pending_usage_counts.get(record.signature, 0))
+
+    def _pending_delta_total(self) -> int:
+        return sum(abs(v) for v in self.pending_usage_counts.values())
+
+    def _flush_pending_usage(self, reason: str) -> None:
+        if not self.pending_usage_counts:
+            return
+        self.db.apply_usage_deltas(self.pending_usage_counts)
+        self.pending_usage_counts.clear()
+        self.pending_usage_last_flush = datetime.now()
+        self._save_pending_usage()
+        self._append_scan_log("flush", "", f"usage_flushed_{reason}", [], target=None)
+
+    def _flush_if_needed(self) -> None:
+        total = self._pending_delta_total()
+        elapsed = (datetime.now() - self.pending_usage_last_flush).total_seconds()
+        if total >= self.flush_threshold or elapsed >= self.flush_interval_seconds:
+            self._flush_pending_usage("interval_or_threshold")
+
+    def _schedule_periodic_flush(self) -> None:
+        self._flush_job_id = self.root.after(15000, self._periodic_flush_tick)
+
+    def _periodic_flush_tick(self) -> None:
+        try:
+            self._flush_if_needed()
+        except Exception:
+            pass
+        self._schedule_periodic_flush()
+
+    def on_close(self) -> None:
+        try:
+            if self._flush_job_id is not None:
+                self.root.after_cancel(self._flush_job_id)
+                self._flush_job_id = None
+            self._flush_pending_usage("app_close")
+        except Exception as exc:
+            messagebox.showerror(
+                "Close Error",
+                f"Could not save pending usage updates to Excel:\n{exc}\n\n"
+                "The app will remain open so no usage data is lost.",
+            )
+            return
+        self.root.destroy()
+
     def _append_scan_log(
         self,
         event: str,
@@ -689,7 +837,7 @@ class MembershipApp:
             len(matches),
             safe_csv_value(row_target.display_name if row_target else ""),
             safe_csv_value(row_target.membership_number if row_target else ""),
-            row_target.membership_amount_used if row_target else "",
+            self._effective_usage_count(row_target) if row_target else "",
             safe_csv_value(row_target.sheet_name if row_target else ""),
             row_target.row_number if row_target else "",
             safe_csv_value(self.excel_path_var.get().strip()),
@@ -744,8 +892,17 @@ class MembershipApp:
             self._set_status("Excel file not found.", "error")
             return
 
+        if self.pending_usage_counts:
+            try:
+                self._flush_pending_usage("before_reload")
+            except Exception as exc:
+                self._set_status(f"Failed to flush pending usage updates: {exc}", "error")
+                messagebox.showerror("Reload Error", f"Could not save pending usage updates:\n{exc}")
+                return
+
         try:
             self.db.load_excel(excel_path)
+            self._load_pending_usage(excel_path)
         except Exception as exc:
             self._set_status(f"Failed to load database: {exc}", "error")
             messagebox.showerror("Load Error", f"Could not load workbook:\n{exc}")
@@ -757,6 +914,7 @@ class MembershipApp:
         self.scan_in_progress = False
         self.selected_match_id.set("")
         self._clear_detail_editor()
+        self.pending_usage_last_flush = datetime.now()
         self._set_status(f"Loaded {len(self.db.records)} membership records.", "ok")
         self.scan_entry.focus_set()
 
@@ -841,7 +999,7 @@ class MembershipApp:
             details = (
                 f"{member.membership_type}   |   #{member.membership_number or 'N/A'}   |   "
                 f"Cart: {parse_yes_no(member.includes_cart)}   |   Range: {parse_yes_no(member.includes_range)}   |   "
-                f"Used: {member.membership_amount_used}"
+                f"Used: {self._effective_usage_count(member)}"
             )
             ctk.CTkLabel(
                 card,
@@ -875,32 +1033,34 @@ class MembershipApp:
         self._apply_scan_for_record(record, self.last_scan_text)
 
     def _apply_scan_for_record(self, record: MemberRecord, scan_value: str) -> None:
-        previous = record.membership_amount_used
-        new_value = previous + 1
-        try:
-            updated = self.db.update_record(record.signature, {"membership_amount_used": new_value})
-        except Exception as exc:
-            self._set_status(f"Failed to update usage count: {exc}", "error")
-            messagebox.showerror("Save Error", f"Could not save usage update:\n{exc}")
-            return
+        self._record_pending_delta(record.signature, 1)
+        effective_value = self._effective_usage_count(record)
 
         self.last_scan_events.append(
             ScanEvent(
-                signature=updated.signature,
-                previous_amount=previous,
-                new_amount=new_value,
+                signature=record.signature,
+                delta=1,
                 scan_value=scan_value,
                 scanned_at=datetime.now().isoformat(timespec="seconds"),
             )
         )
 
+        try:
+            self._flush_if_needed()
+        except Exception as exc:
+            self._set_status(f"Background usage sync failed: {exc}", "error")
+            messagebox.showwarning(
+                "Sync Warning",
+                f"Scan was recorded, but Excel sync is pending due to an error:\n{exc}",
+            )
+
         self.current_matches = [self.db.get_record(r.signature) or r for r in self.current_matches]
         self._show_matches(self.current_matches)
-        self.current_selection = updated.signature
+        self.current_selection = record.signature
         self.refresh_editor_from_selection()
-        self._append_scan_log("scan", scan_value, "verified", [updated], target=updated)
+        self._append_scan_log("scan", scan_value, "verified", [record], target=record)
         self._set_status(
-            f"Verified: {updated.display_name} | Usage count is now {updated.membership_amount_used}.",
+            f"Verified: {record.display_name} | Usage count is now {effective_value}.",
             "ok",
         )
         self.scan_var.set("")
@@ -917,20 +1077,20 @@ class MembershipApp:
             self._set_status("Undo failed: record no longer exists.", "error")
             return
 
+        self._record_pending_delta(record.signature, -event.delta)
+
         try:
-            updated = self.db.update_record(record.signature, {"membership_amount_used": event.previous_amount})
+            self._flush_if_needed()
         except Exception as exc:
-            self._set_status(f"Undo failed: {exc}", "error")
-            messagebox.showerror("Undo Error", f"Could not undo scan:\n{exc}")
-            return
+            self._set_status(f"Undo saved locally but sync failed: {exc}", "warn")
 
         self.current_matches = [self.db.get_record(r.signature) or r for r in self.current_matches]
         self._show_matches(self.current_matches)
-        self.current_selection = updated.signature
+        self.current_selection = record.signature
         self.refresh_editor_from_selection()
-        self._append_scan_log("undo", event.scan_value, "scan_reverted", [updated], target=updated)
+        self._append_scan_log("undo", event.scan_value, "scan_reverted", [record], target=record)
         self._set_status(
-            f"Undo complete: {updated.display_name} usage reverted to {updated.membership_amount_used}.",
+            f"Undo complete: {record.display_name} usage reverted to {self._effective_usage_count(record)}.",
             "ok",
         )
 
@@ -967,7 +1127,7 @@ class MembershipApp:
         self.detail_vars["membership_number"].set(record.membership_number)
         self.detail_vars["includes_cart"].set(parse_yes_no(record.includes_cart))
         self.detail_vars["includes_range"].set(parse_yes_no(record.includes_range))
-        self.detail_vars["membership_amount_used"].set(str(record.membership_amount_used))
+        self.detail_vars["membership_amount_used"].set(str(self._effective_usage_count(record)))
 
     def _clear_detail_editor(self) -> None:
         self.detail_vars["first_name"].set("")
@@ -983,6 +1143,17 @@ class MembershipApp:
         if not self.current_selection:
             self._set_status("Select a member before saving changes.", "warn")
             return
+
+        if self.pending_usage_counts:
+            try:
+                self._flush_pending_usage("before_edit")
+            except Exception as exc:
+                self._set_status(f"Save failed: pending usage sync error: {exc}", "error")
+                messagebox.showerror(
+                    "Save Error",
+                    f"Could not sync pending usage counts before editing:\n{exc}",
+                )
+                return
 
         updates = {
             "first_name": self.detail_vars["first_name"].get(),
@@ -1034,7 +1205,14 @@ def main() -> None:
     root = ctk.CTk()
     app = MembershipApp(root)
     app.scan_entry.focus_set()
-    root.mainloop()
+    try:
+        root.mainloop()
+    finally:
+        try:
+            if app.pending_usage_counts:
+                app._flush_pending_usage("mainloop_exit")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

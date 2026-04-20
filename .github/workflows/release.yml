@@ -117,6 +117,14 @@ jobs:
           name: MembershipVerifier-macos
           path: release-assets
 
+      - name: Generate SHA256 checksums
+        run: |
+          cd release-assets
+          sha256sum MembershipVerifier.exe > MembershipVerifier.exe.sha256
+          sha256sum MembershipVerifier-linux > MembershipVerifier-linux.sha256
+          sha256sum MembershipVerifier.dmg > MembershipVerifier.dmg.sha256
+          cat MembershipVerifier.exe.sha256 MembershipVerifier-linux.sha256 MembershipVerifier.dmg.sha256 > SHA256SUMS.txt
+
       - name: Create GitHub release and upload assets
         uses: softprops/action-gh-release@v2
         with:
@@ -124,3 +132,7 @@ jobs:
             release-assets/MembershipVerifier.exe
             release-assets/MembershipVerifier-linux
             release-assets/MembershipVerifier.dmg
+            release-assets/MembershipVerifier.exe.sha256
+            release-assets/MembershipVerifier-linux.sha256
+            release-assets/MembershipVerifier.dmg.sha256
+            release-assets/SHA256SUMS.txt

@@ -11,6 +11,7 @@ Desktop app to verify memberships by scanning a barcode card and matching it aga
 - Writes every scan result to a CSV history log.
 - Automatically clears previous scan context when the next card starts scanning.
 - Tracks and updates `Membership Amount Used` on each verified scan.
+- Tracks scans in a local pending-usage cache and periodically syncs counts to Excel.
 - Supports undo of the last scan to correct accidental scans.
 - Includes in-app editing for member details, including `Includes Cart` and `Includes Range`.
 - Loads all membership sheets in the workbook (every non-total tab), not just a single tab.
@@ -78,6 +79,13 @@ The app attempts lookup in this order:
   - Linux: `~/.local/share/MembershipVerifier/scan_history.csv`
 - A row is added for every scan with timestamp, scan value, result (`verified`, `multiple_matches`, `not_found`), and matched member details.
 - Additional audit entries are logged for `undo` and `edit` actions.
+
+## Usage count syncing
+
+- Scans are first recorded in a local temp file: `pending_usage.json` in the app data folder.
+- The app flushes pending usage deltas to Excel periodically, at threshold, and on clean app close.
+- This reduces frequent workbook writes and lowers file-lock contention on Windows.
+- If the app cannot flush on close, it keeps the window open and shows an error so no usage data is lost.
 
 ## Notes about your current workbook
 
