@@ -16,6 +16,64 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 import openpyxl
+from PIL import Image
+
+
+# ------------------------------
+# Icon configuration (obvious edit point)
+# ------------------------------
+# Replace this file with your own icon source before building.
+# Accepted formats: .png, .jpg/.jpeg, .webp
+APP_ICON_SOURCE = Path(__file__).resolve().parent / "Icon.png"
+
+
+def inferred_icon_background(image: Image.Image) -> tuple[int, int, int, int]:
+    rgba = image.convert("RGBA")
+    w, h = rgba.size
+    if w == 0 or h == 0:
+        return (255, 255, 255, 255)
+    samples = [
+        rgba.getpixel((0, 0)),
+        rgba.getpixel((w - 1, 0)),
+        rgba.getpixel((0, h - 1)),
+        rgba.getpixel((w - 1, h - 1)),
+    ]
+    luminance_values: list[float] = []
+    for r, g, b, a in samples:
+        if a < 20:
+            continue
+        luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b)
+        luminance_values.append(luminance)
+    avg = (sum(luminance_values) / len(luminance_values)) if luminance_values else 255.0
+    if avg < 128:
+        return (0, 0, 0, 255)
+    return (255, 255, 255, 255)
+
+
+def build_icon_assets(source: Path, output_png: Path, output_ico: Path, target_size: int = 512) -> None:
+    if not source.exists():
+        return
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.open(source).convert("RGBA")
+    bg = inferred_icon_background(image)
+
+    scale = target_size / max(1, image.height)
+    new_w = max(1, int(round(image.width * scale)))
+    resized = image.resize((new_w, target_size), Image.Resampling.LANCZOS)
+
+    if resized.width > target_size:
+        left = (resized.width - target_size) // 2
+        resized = resized.crop((left, 0, left + target_size, target_size))
+
+    canvas = Image.new("RGBA", (target_size, target_size), bg)
+    x = (target_size - resized.width) // 2
+    canvas.alpha_composite(resized, dest=(x, 0))
+
+    canvas.save(output_png)
+    canvas.save(
+        output_ico,
+        sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)],
+    )
 
 
 def normalize(value: str) -> str:
@@ -59,7 +117,7 @@ def safe_csv_value(value: str) -> str:
 
 
 def layout_mode_for_width(width: int) -> str:
-    if width <= 700:
+    if width <= 880:
         return "compact"
     return "wide"
 
@@ -540,9 +598,9 @@ class MembershipApp:
         self.flush_threshold = 20
         self._flush_job_id: str | None = None
         self._layout_mode = "wide"
-        self.settings_path = self._default_settings_path()
         self.icon_path: Path | None = None
         self.audit = AuditTrail(self._app_data_dir())
+        self._icon_image = None
 
         self.detail_vars = {
             "first_name": tk.StringVar(),
@@ -561,8 +619,8 @@ class MembershipApp:
         self._layout_mode = layout_mode_for_width(self.root.winfo_width())
         self._apply_layout_mode(self._layout_mode)
         self._ensure_log_file()
+        self._ensure_icon_assets()
         self._verify_public_log_integrity()
-        self._load_settings()
         self.set_packaged_icon()
         self._apply_window_icon()
         self._audit("app_started", platform=sys.platform)
@@ -639,22 +697,41 @@ class MembershipApp:
         file_card, file_content = self._make_card(controls_wrap, "Database")
         file_card.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         self.file_card = file_card
+        self.file_content = file_content
         file_content.grid_columnconfigure(0, weight=1)
-        ctk.CTkEntry(file_content, textvariable=self.excel_path_var, height=42, corner_radius=14).grid(
-            row=0, column=0, sticky="ew"
+        self.database_entry = ctk.CTkEntry(file_content, textvariable=self.excel_path_var, height=42, corner_radius=14)
+        self.database_entry.grid(row=0, column=0, sticky="ew")
+
+        self.database_button_row = ctk.CTkFrame(file_content, fg_color="transparent")
+        self.database_button_row.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+        self.database_button_row.grid_columnconfigure((0, 1, 2), weight=1)
+        self.database_browse_btn = ctk.CTkButton(
+            self.database_button_row,
+            text="Browse",
+            command=self.choose_file,
+            height=42,
+            corner_radius=14,
+            font=ctk.CTkFont(size=13, weight="bold"),
         )
-        ctk.CTkButton(file_content, text="Browse", command=self.choose_file, height=42, corner_radius=14).grid(
-            row=0, column=1, padx=(8, 0)
+        self.database_reload_btn = ctk.CTkButton(
+            self.database_button_row,
+            text="Reload",
+            command=self.reload_database,
+            height=42,
+            corner_radius=14,
+            font=ctk.CTkFont(size=13, weight="bold"),
         )
-        ctk.CTkButton(file_content, text="Reload", command=self.reload_database, height=42, corner_radius=14).grid(
-            row=0, column=2, padx=(8, 0)
+        self.database_logs_btn = ctk.CTkButton(
+            self.database_button_row,
+            text="Open Logs",
+            command=self.open_log_folder,
+            height=42,
+            corner_radius=14,
+            font=ctk.CTkFont(size=13, weight="bold"),
         )
-        ctk.CTkButton(file_content, text="Open Logs", command=self.open_log_folder, height=42, corner_radius=14).grid(
-            row=0, column=3, padx=(8, 0)
-        )
-        ctk.CTkButton(file_content, text="Set Icon", command=self.choose_icon, height=42, corner_radius=14).grid(
-            row=0, column=4, padx=(8, 0)
-        )
+        self.database_browse_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.database_reload_btn.grid(row=0, column=1, sticky="ew", padx=6)
+        self.database_logs_btn.grid(row=0, column=2, sticky="ew", padx=(6, 0))
 
         scan_card, scan_content = self._make_card(controls_wrap, "Scanner")
         scan_card.grid(row=2, column=0, sticky="nsew", padx=(0, 8))
@@ -674,9 +751,10 @@ class MembershipApp:
 
         action_row = ctk.CTkFrame(scan_content, fg_color="transparent")
         action_row.grid(row=1, column=0, sticky="ew")
-        for col in range(4):
+        self.action_row = action_row
+        for col in range(2):
             action_row.grid_columnconfigure(col, weight=1)
-        ctk.CTkButton(
+        self.verify_btn = ctk.CTkButton(
             action_row,
             text="Verify",
             command=self.verify_scan,
@@ -686,18 +764,35 @@ class MembershipApp:
             hover_color="#EF8C2D",
             text_color="#163046",
             font=ctk.CTkFont(size=14, weight="bold"),
-        ).grid(
-            row=0, column=0, sticky="ew", padx=(0, 6)
         )
-        ctk.CTkButton(action_row, text="Confirm Selected", command=self.confirm_selected_scan, height=42, corner_radius=14).grid(
-            row=0, column=1, sticky="ew", padx=6
+        self.confirm_btn = ctk.CTkButton(
+            action_row,
+            text="Confirm Selected",
+            command=self.confirm_selected_scan,
+            height=42,
+            corner_radius=14,
+            font=ctk.CTkFont(size=13, weight="bold"),
         )
-        ctk.CTkButton(action_row, text="Undo Last Scan", command=self.undo_last_scan, height=42, corner_radius=14).grid(
-            row=0, column=2, sticky="ew", padx=6
+        self.undo_btn = ctk.CTkButton(
+            action_row,
+            text="Undo Last Scan",
+            command=self.undo_last_scan,
+            height=42,
+            corner_radius=14,
+            font=ctk.CTkFont(size=13, weight="bold"),
         )
-        ctk.CTkButton(action_row, text="Clear", command=self.clear_scan, height=42, corner_radius=14).grid(
-            row=0, column=3, sticky="ew", padx=(6, 0)
+        self.clear_btn = ctk.CTkButton(
+            action_row,
+            text="Clear",
+            command=self.clear_scan,
+            height=42,
+            corner_radius=14,
+            font=ctk.CTkFont(size=13, weight="bold"),
         )
+        self.verify_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 6))
+        self.confirm_btn.grid(row=0, column=1, sticky="ew", padx=(6, 0), pady=(0, 6))
+        self.undo_btn.grid(row=1, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
+        self.clear_btn.grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(6, 0))
 
         status_card, status_content = self._make_card(controls_wrap, "Status")
         status_card.grid(row=2, column=1, sticky="nsew", padx=(8, 0))
@@ -826,38 +921,18 @@ class MembershipApp:
     def _app_data_dir(self) -> Path:
         return app_data_dir_for_platform(sys.platform, Path.home())
 
-    def _default_settings_path(self) -> Path:
-        return self._app_data_dir() / "settings.json"
+    def _ensure_icon_assets(self) -> None:
+        assets_dir = self._default_startup_dir() / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        out_png = assets_dir / "app_icon.png"
+        out_ico = assets_dir / "app_icon.ico"
+        build_icon_assets(APP_ICON_SOURCE, out_png, out_ico)
 
     def _default_log_path(self) -> Path:
         return self._app_data_dir() / "scan_history.csv"
 
     def _default_pending_usage_path(self) -> Path:
         return self._app_data_dir() / "pending_usage.json"
-
-    def _load_settings(self) -> None:
-        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
-        if not self.settings_path.exists():
-            return
-        try:
-            payload = json.loads(self.settings_path.read_text(encoding="utf-8"))
-            icon_value = payload.get("icon_path", "")
-            if icon_value:
-                icon_candidate = Path(str(icon_value))
-                if icon_candidate.exists():
-                    self.icon_path = icon_candidate
-        except Exception:
-            pass
-
-    def _save_settings(self) -> None:
-        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "icon_path": str(self.icon_path) if self.icon_path else "",
-            "updated_at": datetime.now().isoformat(timespec="seconds"),
-        }
-        temp = self.settings_path.with_suffix(".tmp")
-        temp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        os.replace(temp, self.settings_path)
 
     def _apply_window_icon(self) -> None:
         if not self.icon_path:
@@ -872,33 +947,11 @@ class MembershipApp:
         except Exception:
             pass
 
-    def choose_icon(self) -> None:
-        selected = filedialog.askopenfilename(
-            title="Select App Icon",
-            filetypes=[
-                ("Icon files", "*.ico *.png *.gif"),
-                ("All Files", "*.*"),
-            ],
-        )
-        if not selected:
-            return
-        candidate = Path(selected)
-        if not candidate.exists():
-            return
-        self.icon_path = candidate
-        self._save_settings()
-        self._apply_window_icon()
-        self._set_status("App icon updated.", "ok")
-        self._audit("icon_changed", icon_path=str(candidate))
-
     def set_packaged_icon(self) -> None:
-        if self.icon_path and self.icon_path.exists():
-            return
         startup = self._default_startup_dir()
         icon_path = startup / "assets" / "app_icon.png"
         if icon_path.exists():
             self.icon_path = icon_path
-            self._save_settings()
             self._apply_window_icon()
 
     def _audit(self, event: str, **payload) -> None:
@@ -921,6 +974,23 @@ class MembershipApp:
             self.file_card.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
             self.scan_card.grid(row=2, column=0, columnspan=2, sticky="ew", padx=(0, 0), pady=(0, 8))
             self.status_card.grid(row=3, column=0, columnspan=2, sticky="ew", padx=(0, 0))
+
+            self.file_content.grid_columnconfigure(0, weight=1)
+            self.file_content.grid_columnconfigure(1, weight=0)
+            self.database_entry.grid(row=0, column=0, sticky="ew")
+            self.database_button_row.grid(row=1, column=0, sticky="ew", padx=(0, 0), pady=(8, 0))
+            self.database_button_row.grid_columnconfigure(0, weight=1)
+            self.database_button_row.grid_columnconfigure(1, weight=1)
+            self.database_button_row.grid_columnconfigure(2, weight=1)
+            self.database_browse_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 4))
+            self.database_reload_btn.grid(row=0, column=1, sticky="ew", padx=(4, 4), pady=(0, 4))
+            self.database_logs_btn.grid(row=0, column=2, sticky="ew", padx=(4, 0), pady=(0, 4))
+
+            self.verify_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 4))
+            self.confirm_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0), pady=(0, 4))
+            self.undo_btn.grid(row=1, column=0, sticky="ew", padx=(0, 4), pady=(4, 0))
+            self.clear_btn.grid(row=1, column=1, sticky="ew", padx=(4, 0), pady=(4, 0))
+
             self.split.grid_columnconfigure(0, weight=1)
             self.split.grid_columnconfigure(1, weight=1)
             self.split.grid_rowconfigure(0, weight=1)
@@ -933,6 +1003,23 @@ class MembershipApp:
             self.file_card.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
             self.scan_card.grid(row=2, column=0, sticky="nsew", padx=(0, 8), pady=(0, 0))
             self.status_card.grid(row=2, column=1, sticky="nsew", padx=(8, 0), pady=(0, 0))
+
+            self.file_content.grid_columnconfigure(0, weight=1)
+            self.file_content.grid_columnconfigure(1, weight=0)
+            self.database_entry.grid(row=0, column=0, sticky="ew")
+            self.database_button_row.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=(0, 0))
+            self.database_button_row.grid_columnconfigure(0, weight=1)
+            self.database_button_row.grid_columnconfigure(1, weight=1)
+            self.database_button_row.grid_columnconfigure(2, weight=1)
+            self.database_browse_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 0))
+            self.database_reload_btn.grid(row=0, column=1, sticky="ew", padx=6, pady=(0, 0))
+            self.database_logs_btn.grid(row=0, column=2, sticky="ew", padx=(6, 0), pady=(0, 0))
+
+            self.verify_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 6))
+            self.confirm_btn.grid(row=0, column=1, sticky="ew", padx=(6, 0), pady=(0, 6))
+            self.undo_btn.grid(row=1, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
+            self.clear_btn.grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(6, 0))
+
             self.split.grid_columnconfigure(0, weight=3)
             self.split.grid_columnconfigure(1, weight=2)
             self.split.grid_rowconfigure(0, weight=1)

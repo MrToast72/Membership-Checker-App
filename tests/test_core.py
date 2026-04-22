@@ -3,6 +3,8 @@ from pathlib import Path
 from app import (
     AuditTrail,
     app_data_dir_for_platform,
+    build_icon_assets,
+    inferred_icon_background,
     layout_mode_for_width,
     safe_cell_text,
     safe_csv_value,
@@ -11,8 +13,8 @@ from app import (
 
 def test_layout_mode_boundaries() -> None:
     assert layout_mode_for_width(445) == "compact"
-    assert layout_mode_for_width(700) == "compact"
-    assert layout_mode_for_width(701) == "wide"
+    assert layout_mode_for_width(880) == "compact"
+    assert layout_mode_for_width(881) == "wide"
 
 
 def test_app_data_dir_platform_paths() -> None:
@@ -52,3 +54,29 @@ def test_audit_files_are_hidden_like(tmp_path: Path) -> None:
     audit = AuditTrail(tmp_path)
     assert audit.audit_file.name.startswith(".")
     assert audit.seed_file.name.startswith(".")
+
+
+def test_icon_build_preserves_height_and_letterboxes(tmp_path: Path) -> None:
+    from PIL import Image
+
+    source = tmp_path / "source.png"
+    wide = Image.new("RGBA", (400, 200), (10, 10, 10, 255))
+    wide.save(source)
+
+    out_png = tmp_path / "out.png"
+    out_ico = tmp_path / "out.ico"
+    build_icon_assets(source, out_png, out_ico, target_size=256)
+
+    result = Image.open(out_png)
+    assert result.size == (256, 256)
+    assert out_ico.exists()
+
+
+def test_icon_background_inference_white_and_black(tmp_path: Path) -> None:
+    from PIL import Image
+
+    bright = Image.new("RGBA", (10, 10), (240, 240, 240, 255))
+    dark = Image.new("RGBA", (10, 10), (20, 20, 20, 255))
+
+    assert inferred_icon_background(bright) == (255, 255, 255, 255)
+    assert inferred_icon_background(dark) == (0, 0, 0, 255)

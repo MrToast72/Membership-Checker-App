@@ -18,6 +18,7 @@ Desktop app to verify memberships by scanning a barcode card and matching it aga
 - Uses a modern rounded UI powered by CustomTkinter.
 - Responsive layout down to `445px` app width (compact/stacked mode).
 - Supports app icon configuration and packaged default icon assets.
+- Uses code-based icon config from `Icon.png` beside `app.py` (no in-app icon picker).
 
 ## Data integrity and safety
 
@@ -50,6 +51,19 @@ Current tests cover:
 - Platform app-data path resolution.
 - Formula-injection protections for edited values/log CSV.
 - Hidden audit trail hash-chain integrity and tamper detection.
+- Icon asset preprocessing behavior (format handling + background inference).
+
+## App icon setup (code-based)
+
+- Place your source icon file beside `app.py` as `Icon.png` (or update `APP_ICON_SOURCE` in `app.py`).
+- Supported source formats include `.png`, `.jpg/.jpeg`, and `.webp`.
+- During startup/build preparation, the app generates:
+  - `assets/app_icon.png`
+  - `assets/app_icon.ico`
+- Processing rule:
+  - The image height is preserved and scaled to icon height.
+  - Width is centered with letterbox fill.
+  - Fill color is inferred as white or black based on the source background.
 
 ## Setup
 
