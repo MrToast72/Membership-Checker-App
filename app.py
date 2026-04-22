@@ -992,11 +992,11 @@ class MembershipApp:
             self.clear_btn.grid(row=1, column=1, sticky="ew", padx=(4, 0), pady=(4, 0))
 
             self.split.grid_columnconfigure(0, weight=1)
-            self.split.grid_columnconfigure(1, weight=1)
+            self.split.grid_columnconfigure(1, weight=0, minsize=0)
             self.split.grid_rowconfigure(0, weight=1)
             self.split.grid_rowconfigure(1, weight=1)
-            self.left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 0), pady=(0, 8))
-            self.right_card.grid(row=1, column=0, sticky="nsew", padx=(0, 0), pady=(0, 0))
+            self.left_card.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=(0, 0), pady=(0, 8))
+            self.right_card.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=(0, 0), pady=(0, 0))
         else:
             self.controls_wrap.grid_columnconfigure(0, weight=2)
             self.controls_wrap.grid_columnconfigure(1, weight=1)
@@ -1024,8 +1024,8 @@ class MembershipApp:
             self.split.grid_columnconfigure(1, weight=2)
             self.split.grid_rowconfigure(0, weight=1)
             self.split.grid_rowconfigure(1, weight=0)
-            self.left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=(0, 0))
-            self.right_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0), pady=(0, 0))
+            self.left_card.grid(row=0, column=0, columnspan=1, sticky="nsew", padx=(0, 8), pady=(0, 0))
+            self.right_card.grid(row=0, column=1, columnspan=1, sticky="nsew", padx=(8, 0), pady=(0, 0))
 
     def _ensure_log_file(self) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
