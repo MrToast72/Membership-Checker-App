@@ -16,6 +16,8 @@ Desktop app to verify memberships by scanning a barcode card and matching it aga
 - Includes in-app editing for member details, including `Includes Cart` and `Includes Range`.
 - Loads all membership sheets in the workbook (every non-total tab), not just a single tab.
 - Uses a modern rounded UI powered by CustomTkinter.
+- Responsive layout down to `445px` app width (compact/stacked mode).
+- Supports app icon configuration and packaged default icon assets.
 
 ## Data integrity and safety
 
@@ -23,12 +25,31 @@ Desktop app to verify memberships by scanning a barcode card and matching it aga
 - A timestamped backup copy is created before each save in a `backups/` folder beside the workbook.
 - Save operations fail fast if the workbook changed on disk after loading, preventing silent overwrite.
 - Basic input hardening is applied to block formula-injection-like values in editable text fields.
+- Public scan logs are hash-tracked and verified on startup to detect tampering.
+- A hidden internal audit trail (hash-chained) records app activity and log operations.
 
 ## Requirements
 
 - Python 3.10+
 - Windows, macOS, or Linux
 - Dependencies from `requirements.txt` (`openpyxl`, `customtkinter`)
+- Dev dependencies for tests: `requirements-dev.txt` (`pytest`)
+
+## Tests
+
+Run tests locally:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Current tests cover:
+
+- Responsive layout mode thresholds.
+- Platform app-data path resolution.
+- Formula-injection protections for edited values/log CSV.
+- Hidden audit trail hash-chain integrity and tamper detection.
 
 ## Setup
 
@@ -86,6 +107,12 @@ The app attempts lookup in this order:
 - The app flushes pending usage deltas to Excel periodically, at threshold, and on clean app close.
 - This reduces frequent workbook writes and lowers file-lock contention on Windows.
 - If the app cannot flush on close, it keeps the window open and shows an error so no usage data is lost.
+
+## Internal audit trail
+
+- In addition to the visible `scan_history.csv`, the app writes a hidden internal audit journal.
+- It stores hash-chained records for app lifecycle events, scan/log operations, and critical state updates.
+- The app verifies chain integrity on startup and flags integrity failures.
 
 ## Notes about your current workbook
 

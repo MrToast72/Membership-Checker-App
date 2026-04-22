@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import re
@@ -55,6 +56,109 @@ def safe_csv_value(value: str) -> str:
     if text.startswith(("=", "+", "-", "@")):
         return "'" + text
     return text
+
+
+def layout_mode_for_width(width: int) -> str:
+    if width <= 700:
+        return "compact"
+    return "wide"
+
+
+def app_data_dir_for_platform(platform_name: str, home_path: Path) -> Path:
+    if platform_name.startswith("win"):
+        base = home_path / "AppData" / "Local"
+    elif platform_name == "darwin":
+        base = home_path / "Library" / "Application Support"
+    else:
+        base = home_path / ".local" / "share"
+    return base / "MembershipVerifier"
+
+
+class AuditTrail:
+    def __init__(self, app_data_dir: Path) -> None:
+        self.hidden_dir = app_data_dir / ".cache" / ".mvguard"
+        self.audit_file = self.hidden_dir / ".act_journal.bin"
+        self.seed_file = self.hidden_dir / ".seed.bin"
+        self.state_file = self.hidden_dir / ".state.json"
+        self.hidden_dir.mkdir(parents=True, exist_ok=True)
+        self.seed = self._load_or_create_seed()
+        self.last_hash = self._read_last_hash()
+
+    def _load_or_create_seed(self) -> str:
+        if self.seed_file.exists():
+            return self.seed_file.read_text(encoding="utf-8").strip()
+        seed = hashlib.sha256(os.urandom(64)).hexdigest()
+        self.seed_file.write_text(seed, encoding="utf-8")
+        return seed
+
+    def _read_last_hash(self) -> str:
+        if not self.audit_file.exists():
+            return "0" * 64
+        try:
+            lines = self.audit_file.read_text(encoding="utf-8").splitlines()
+            if not lines:
+                return "0" * 64
+            last = json.loads(lines[-1])
+            return str(last.get("hash", "0" * 64))
+        except Exception:
+            return "0" * 64
+
+    def verify_chain(self) -> bool:
+        if not self.audit_file.exists():
+            return True
+        prev = "0" * 64
+        try:
+            for line in self.audit_file.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                claimed_prev = item.get("prev_hash", "")
+                claimed_hash = item.get("hash", "")
+                payload = item.get("payload", {})
+                base = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+                expected = hashlib.sha256(f"{prev}|{base}|{self.seed}".encode("utf-8")).hexdigest()
+                if claimed_prev != prev or claimed_hash != expected:
+                    return False
+                prev = claimed_hash
+            return True
+        except Exception:
+            return False
+
+    def log(self, event: str, payload: dict[str, str | int | float | bool]) -> None:
+        clean_payload = dict(payload)
+        clean_payload["event"] = event
+        clean_payload["ts"] = datetime.now().isoformat(timespec="seconds")
+        base = json.dumps(clean_payload, sort_keys=True, separators=(",", ":"))
+        digest = hashlib.sha256(f"{self.last_hash}|{base}|{self.seed}".encode("utf-8")).hexdigest()
+        row = {
+            "prev_hash": self.last_hash,
+            "hash": digest,
+            "payload": clean_payload,
+        }
+        with self.audit_file.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, separators=(",", ":")) + "\n")
+        self.last_hash = digest
+
+    def get_state(self, key: str, default: str = "") -> str:
+        if not self.state_file.exists():
+            return default
+        try:
+            payload = json.loads(self.state_file.read_text(encoding="utf-8"))
+            return str(payload.get(key, default))
+        except Exception:
+            return default
+
+    def set_state(self, key: str, value: str) -> None:
+        payload = {}
+        if self.state_file.exists():
+            try:
+                payload = json.loads(self.state_file.read_text(encoding="utf-8"))
+            except Exception:
+                payload = {}
+        payload[key] = value
+        temp = self.state_file.with_suffix(".tmp")
+        temp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        os.replace(temp, self.state_file)
 
 
 @dataclass
@@ -415,7 +519,7 @@ class MembershipApp:
         self.root = root
         self.root.title("Membership Card Verifier")
         self.root.geometry("1280x820")
-        self.root.minsize(860, 620)
+        self.root.minsize(445, 620)
 
         self.db = MembershipDatabase()
         self.excel_path_var = tk.StringVar()
@@ -435,6 +539,10 @@ class MembershipApp:
         self.flush_interval_seconds = 120
         self.flush_threshold = 20
         self._flush_job_id: str | None = None
+        self._layout_mode = "wide"
+        self.settings_path = self._default_settings_path()
+        self.icon_path: Path | None = None
+        self.audit = AuditTrail(self._app_data_dir())
 
         self.detail_vars = {
             "first_name": tk.StringVar(),
@@ -449,10 +557,25 @@ class MembershipApp:
 
         self._build_styles()
         self._build_ui()
+        self.root.update_idletasks()
+        self._layout_mode = layout_mode_for_width(self.root.winfo_width())
+        self._apply_layout_mode(self._layout_mode)
         self._ensure_log_file()
+        self._verify_public_log_integrity()
+        self._load_settings()
+        self.set_packaged_icon()
+        self._apply_window_icon()
+        self._audit("app_started", platform=sys.platform)
+        if not self.audit.verify_chain():
+            self._set_status("Warning: audit chain integrity check failed.", "error")
+            messagebox.showwarning(
+                "Audit Warning",
+                "Internal audit log integrity check failed. This may indicate tampering.",
+            )
         self._auto_load_default_file()
         self._schedule_periodic_flush()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.root.bind("<Configure>", self._on_window_configure)
 
     def _build_styles(self) -> None:
         ctk.set_appearance_mode("light")
@@ -488,6 +611,7 @@ class MembershipApp:
         controls_wrap.grid(row=1, column=0, sticky="ew", padx=16, pady=(14, 8))
         controls_wrap.grid_columnconfigure(0, weight=2)
         controls_wrap.grid_columnconfigure(1, weight=1)
+        self.controls_wrap = controls_wrap
 
         chip_row = ctk.CTkFrame(controls_wrap, fg_color="transparent")
         chip_row.grid(row=0, column=0, sticky="w", pady=(0, 10))
@@ -514,6 +638,7 @@ class MembershipApp:
 
         file_card, file_content = self._make_card(controls_wrap, "Database")
         file_card.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        self.file_card = file_card
         file_content.grid_columnconfigure(0, weight=1)
         ctk.CTkEntry(file_content, textvariable=self.excel_path_var, height=42, corner_radius=14).grid(
             row=0, column=0, sticky="ew"
@@ -527,9 +652,13 @@ class MembershipApp:
         ctk.CTkButton(file_content, text="Open Logs", command=self.open_log_folder, height=42, corner_radius=14).grid(
             row=0, column=3, padx=(8, 0)
         )
+        ctk.CTkButton(file_content, text="Set Icon", command=self.choose_icon, height=42, corner_radius=14).grid(
+            row=0, column=4, padx=(8, 0)
+        )
 
         scan_card, scan_content = self._make_card(controls_wrap, "Scanner")
         scan_card.grid(row=2, column=0, sticky="nsew", padx=(0, 8))
+        self.scan_card = scan_card
         scan_content.grid_columnconfigure(0, weight=1)
         self.scan_entry = ctk.CTkEntry(
             scan_content,
@@ -572,6 +701,7 @@ class MembershipApp:
 
         status_card, status_content = self._make_card(controls_wrap, "Status")
         status_card.grid(row=2, column=1, sticky="nsew", padx=(8, 0))
+        self.status_card = status_card
         self.status_label = ctk.CTkLabel(
             status_content,
             textvariable=self.status_var,
@@ -587,11 +717,14 @@ class MembershipApp:
         split.grid_columnconfigure(0, weight=3)
         split.grid_columnconfigure(1, weight=2)
         split.grid_rowconfigure(0, weight=1)
+        self.split = split
 
         left_card, left_content = self._make_card(split, "Match Results")
         right_card, right_content = self._make_card(split, "Edit Member")
         left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         right_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        self.left_card = left_card
+        self.right_card = right_card
 
         self._build_result_table(left_content)
         self._build_detail_editor(right_content)
@@ -685,23 +818,127 @@ class MembershipApp:
 
     def _default_startup_dir(self) -> Path:
         if getattr(sys, "frozen", False):
+            if hasattr(sys, "_MEIPASS"):
+                return Path(getattr(sys, "_MEIPASS"))
             return Path(sys.executable).resolve().parent
         return Path.cwd()
 
     def _app_data_dir(self) -> Path:
-        if sys.platform.startswith("win"):
-            base = Path.home() / "AppData" / "Local"
-        elif sys.platform == "darwin":
-            base = Path.home() / "Library" / "Application Support"
-        else:
-            base = Path.home() / ".local" / "share"
-        return base / "MembershipVerifier"
+        return app_data_dir_for_platform(sys.platform, Path.home())
+
+    def _default_settings_path(self) -> Path:
+        return self._app_data_dir() / "settings.json"
 
     def _default_log_path(self) -> Path:
         return self._app_data_dir() / "scan_history.csv"
 
     def _default_pending_usage_path(self) -> Path:
         return self._app_data_dir() / "pending_usage.json"
+
+    def _load_settings(self) -> None:
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.settings_path.exists():
+            return
+        try:
+            payload = json.loads(self.settings_path.read_text(encoding="utf-8"))
+            icon_value = payload.get("icon_path", "")
+            if icon_value:
+                icon_candidate = Path(str(icon_value))
+                if icon_candidate.exists():
+                    self.icon_path = icon_candidate
+        except Exception:
+            pass
+
+    def _save_settings(self) -> None:
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "icon_path": str(self.icon_path) if self.icon_path else "",
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        temp = self.settings_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(temp, self.settings_path)
+
+    def _apply_window_icon(self) -> None:
+        if not self.icon_path:
+            return
+        try:
+            if self.icon_path.suffix.lower() == ".ico":
+                self.root.iconbitmap(str(self.icon_path))
+            else:
+                image = tk.PhotoImage(file=str(self.icon_path))
+                self.root.iconphoto(True, image)
+                self._icon_image = image
+        except Exception:
+            pass
+
+    def choose_icon(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Select App Icon",
+            filetypes=[
+                ("Icon files", "*.ico *.png *.gif"),
+                ("All Files", "*.*"),
+            ],
+        )
+        if not selected:
+            return
+        candidate = Path(selected)
+        if not candidate.exists():
+            return
+        self.icon_path = candidate
+        self._save_settings()
+        self._apply_window_icon()
+        self._set_status("App icon updated.", "ok")
+        self._audit("icon_changed", icon_path=str(candidate))
+
+    def set_packaged_icon(self) -> None:
+        if self.icon_path and self.icon_path.exists():
+            return
+        startup = self._default_startup_dir()
+        icon_path = startup / "assets" / "app_icon.png"
+        if icon_path.exists():
+            self.icon_path = icon_path
+            self._save_settings()
+            self._apply_window_icon()
+
+    def _audit(self, event: str, **payload) -> None:
+        try:
+            self.audit.log(event, payload)
+        except Exception:
+            pass
+
+    def _on_window_configure(self, _event) -> None:
+        width = self.root.winfo_width()
+        mode = layout_mode_for_width(width)
+        if mode != self._layout_mode:
+            self._layout_mode = mode
+            self._apply_layout_mode(mode)
+
+    def _apply_layout_mode(self, mode: str) -> None:
+        if mode == "compact":
+            self.controls_wrap.grid_columnconfigure(0, weight=1)
+            self.controls_wrap.grid_columnconfigure(1, weight=1)
+            self.file_card.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+            self.scan_card.grid(row=2, column=0, columnspan=2, sticky="ew", padx=(0, 0), pady=(0, 8))
+            self.status_card.grid(row=3, column=0, columnspan=2, sticky="ew", padx=(0, 0))
+            self.split.grid_columnconfigure(0, weight=1)
+            self.split.grid_columnconfigure(1, weight=1)
+            self.split.grid_rowconfigure(0, weight=1)
+            self.split.grid_rowconfigure(1, weight=1)
+            self.left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 0), pady=(0, 8))
+            self.right_card.grid(row=1, column=0, sticky="nsew", padx=(0, 0), pady=(0, 0))
+        else:
+            self.controls_wrap.grid_columnconfigure(0, weight=2)
+            self.controls_wrap.grid_columnconfigure(1, weight=1)
+            self.file_card.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+            self.scan_card.grid(row=2, column=0, sticky="nsew", padx=(0, 8), pady=(0, 0))
+            self.status_card.grid(row=2, column=1, sticky="nsew", padx=(8, 0), pady=(0, 0))
+            self.split.grid_columnconfigure(0, weight=3)
+            self.split.grid_columnconfigure(1, weight=2)
+            self.split.grid_rowconfigure(0, weight=1)
+            self.split.grid_rowconfigure(1, weight=0)
+            self.left_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=(0, 0))
+            self.right_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0), pady=(0, 0))
 
     def _ensure_log_file(self) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -724,17 +961,20 @@ class MembershipApp:
                     "excel_file",
                 ]
             )
+        self._update_public_log_hash()
 
     def _load_pending_usage(self, excel_path: Path) -> None:
         self.pending_usage_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.pending_usage_path.exists():
             self.pending_usage_counts = {}
+            self._audit("pending_usage_loaded", entries=0)
             return
         try:
             payload = json.loads(self.pending_usage_path.read_text(encoding="utf-8"))
             payload_excel = str(payload.get("excel_file", ""))
             if payload_excel != str(excel_path):
                 self.pending_usage_counts = {}
+                self._audit("pending_usage_reset_for_other_excel", excel=str(excel_path))
                 return
             counts: dict[tuple[str, int], int] = {}
             for key, value in payload.get("counts", {}).items():
@@ -746,8 +986,10 @@ class MembershipApp:
                 if delta != 0:
                     counts[(sheet, row)] = delta
             self.pending_usage_counts = counts
+            self._audit("pending_usage_loaded", entries=len(counts))
         except Exception:
             self.pending_usage_counts = {}
+            self._audit("pending_usage_load_failed")
 
     def _save_pending_usage(self) -> None:
         self.pending_usage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -764,6 +1006,7 @@ class MembershipApp:
         temp = self.pending_usage_path.with_suffix(".tmp")
         temp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         os.replace(temp, self.pending_usage_path)
+        self._audit("pending_usage_saved", entries=len(serialized))
 
     def _record_pending_delta(self, signature: tuple[str, int], delta: int) -> None:
         current = self.pending_usage_counts.get(signature, 0)
@@ -773,6 +1016,7 @@ class MembershipApp:
         else:
             self.pending_usage_counts[signature] = new_val
         self._save_pending_usage()
+        self._audit("pending_delta_recorded", signature=f"{signature[0]}|{signature[1]}", delta=delta)
 
     def _effective_usage_count(self, record: MemberRecord) -> int:
         return max(0, record.membership_amount_used + self.pending_usage_counts.get(record.signature, 0))
@@ -783,17 +1027,21 @@ class MembershipApp:
     def _flush_pending_usage(self, reason: str) -> None:
         if not self.pending_usage_counts:
             return
+        pending_count = len(self.pending_usage_counts)
         self.db.apply_usage_deltas(self.pending_usage_counts)
         self.pending_usage_counts.clear()
         self.pending_usage_last_flush = datetime.now()
         self._save_pending_usage()
         self._append_scan_log("flush", "", f"usage_flushed_{reason}", [], target=None)
+        self._audit("usage_flushed", reason=reason, count=pending_count)
 
     def _flush_if_needed(self) -> None:
         total = self._pending_delta_total()
         elapsed = (datetime.now() - self.pending_usage_last_flush).total_seconds()
         if total >= self.flush_threshold or elapsed >= self.flush_interval_seconds:
             self._flush_pending_usage("interval_or_threshold")
+        else:
+            self._audit("usage_flush_skipped", total=total, elapsed=int(elapsed))
 
     def _schedule_periodic_flush(self) -> None:
         self._flush_job_id = self.root.after(15000, self._periodic_flush_tick)
@@ -818,6 +1066,7 @@ class MembershipApp:
                 "The app will remain open so no usage data is lost.",
             )
             return
+        self._audit("app_closed")
         self.root.destroy()
 
     def _append_scan_log(
@@ -845,11 +1094,53 @@ class MembershipApp:
         with self.log_path.open("a", newline="", encoding="utf-8") as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(row)
+        self._update_public_log_hash()
+        self._audit(
+            "scan_log_write",
+            scan_event=event,
+            result=result,
+            scan_value=scan_value,
+            row=row_target.row_number if row_target else 0,
+            sheet=row_target.sheet_name if row_target else "",
+        )
 
     def _set_status(self, message: str, level: str) -> None:
         self.status_var.set(message)
         color = {"ok": "#0E7A46", "warn": "#9A6200", "error": "#A32B2B"}.get(level, "#123B58")
         self.status_label.configure(text_color=color)
+        self._audit("status_updated", level=level, message=message)
+
+    def _file_sha256(self, path: Path) -> str:
+        hasher = hashlib.sha256()
+        with path.open("rb") as file_obj:
+            while True:
+                chunk = file_obj.read(8192)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    def _update_public_log_hash(self) -> None:
+        if not self.log_path.exists():
+            return
+        digest = self._file_sha256(self.log_path)
+        self.audit.set_state("public_log_sha256", digest)
+        self._audit("public_log_hash_updated", digest=digest)
+
+    def _verify_public_log_integrity(self) -> None:
+        expected = self.audit.get_state("public_log_sha256", "")
+        if not expected:
+            if self.log_path.exists():
+                self._update_public_log_hash()
+            return
+        if not self.log_path.exists():
+            self._set_status("Warning: public log file missing.", "error")
+            self._audit("public_log_missing")
+            return
+        actual = self._file_sha256(self.log_path)
+        if actual != expected:
+            self._set_status("Warning: public log integrity check failed.", "error")
+            self._audit("public_log_tamper_detected", expected=expected, actual=actual)
 
     def _auto_load_default_file(self) -> None:
         search_dir = self._default_startup_dir()
@@ -879,6 +1170,7 @@ class MembershipApp:
         if not selected:
             return
         self.excel_path_var.set(selected)
+        self._audit("excel_selected", path=selected)
         self.reload_database()
 
     def reload_database(self) -> None:
@@ -907,6 +1199,8 @@ class MembershipApp:
             self._set_status(f"Failed to load database: {exc}", "error")
             messagebox.showerror("Load Error", f"Could not load workbook:\n{exc}")
             return
+
+        self._audit("excel_loaded", path=str(excel_path), records=len(self.db.records))
 
         self._clear_tree()
         self.current_matches = []
@@ -943,6 +1237,7 @@ class MembershipApp:
             return
 
         self.last_scan_text = text
+        self._audit("scan_input", value=text)
         matches = self.db.lookup(text)
         self.current_matches = matches
         self.scan_in_progress = True
@@ -1021,6 +1316,9 @@ class MembershipApp:
             self.current_selection = matches[0].signature
             self.selected_match_id.set(f"{matches[0].sheet_name}|{matches[0].row_number}")
             self.refresh_editor_from_selection()
+
+    def _base_usage_count(self, record: MemberRecord) -> int:
+        return max(0, record.membership_amount_used)
 
     def confirm_selected_scan(self) -> None:
         record = self._selected_record()
@@ -1163,7 +1461,6 @@ class MembershipApp:
             "membership_number": self.detail_vars["membership_number"].get(),
             "includes_cart": self.detail_vars["includes_cart"].get(),
             "includes_range": self.detail_vars["includes_range"].get(),
-            "membership_amount_used": self.detail_vars["membership_amount_used"].get(),
         }
 
         try:
@@ -1172,6 +1469,12 @@ class MembershipApp:
             self._set_status(f"Save failed: {exc}", "error")
             messagebox.showerror("Save Error", f"Could not save member details:\n{exc}")
             return
+
+        self._audit(
+            "member_updated",
+            signature=f"{updated.sheet_name}|{updated.row_number}",
+            membership_number=updated.membership_number,
+        )
 
         self.current_matches = [self.db.get_record(r.signature) or r for r in self.current_matches]
         if not self.current_matches:
@@ -1192,6 +1495,7 @@ class MembershipApp:
         self.scan_in_progress = False
         self._set_status("Ready for next scan.", "ok")
         self.scan_entry.focus_set()
+        self._audit("scan_cleared")
 
     def _clear_tree(self) -> None:
         for card in self.match_cards:
