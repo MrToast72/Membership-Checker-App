@@ -25,6 +25,7 @@ from PIL import Image
 # Replace this file with your own icon source before building.
 # Accepted formats: .png, .jpg/.jpeg, .webp
 APP_ICON_SOURCE = Path(__file__).resolve().parent / "Icon.png"
+APP_VERSION = "0.7.3"
 
 
 def inferred_icon_background(image: Image.Image) -> tuple[int, int, int, int]:
@@ -575,9 +576,9 @@ class ScanEvent:
 class MembershipApp:
     def __init__(self, root: ctk.CTk) -> None:
         self.root = root
-        self.root.title("Membership Card Verifier")
+        self.root.title(f"Membership Card Verifier v{APP_VERSION}")
         self.root.geometry("1280x820")
-        self.root.minsize(445, 620)
+        self.root.minsize(445, 420)
 
         self.db = MembershipDatabase()
         self.excel_path_var = tk.StringVar()
@@ -642,9 +643,22 @@ class MembershipApp:
     def _build_ui(self) -> None:
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_columnconfigure(1, weight=0)
 
-        container = ctk.CTkFrame(self.root, fg_color="#F2F7FF", corner_radius=0)
-        container.grid(row=0, column=0, sticky="nsew")
+        self.viewport_canvas = tk.Canvas(self.root, highlightthickness=0, bd=0, bg="#F2F7FF")
+        self.viewport_canvas.grid(row=0, column=0, sticky="nsew")
+        self.viewport_scrollbar = ctk.CTkScrollbar(self.root, orientation="vertical", command=self.viewport_canvas.yview)
+        self.viewport_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.viewport_canvas.configure(yscrollcommand=self.viewport_scrollbar.set)
+
+        container = ctk.CTkFrame(self.viewport_canvas, fg_color="#F2F7FF", corner_radius=0)
+        self.viewport_window = self.viewport_canvas.create_window((0, 0), window=container, anchor="nw")
+        container.bind("<Configure>", self._on_content_configure)
+        self.viewport_canvas.bind("<Configure>", self._on_viewport_configure)
+        self.root.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.root.bind_all("<Button-4>", self._on_mousewheel)
+        self.root.bind_all("<Button-5>", self._on_mousewheel)
+
         container.grid_rowconfigure(2, weight=1)
         container.grid_columnconfigure(0, weight=1)
 
@@ -967,6 +981,23 @@ class MembershipApp:
             self._layout_mode = mode
             self._apply_layout_mode(mode)
 
+    def _on_content_configure(self, _event) -> None:
+        self.viewport_canvas.configure(scrollregion=self.viewport_canvas.bbox("all"))
+
+    def _on_viewport_configure(self, event) -> None:
+        self.viewport_canvas.itemconfigure(self.viewport_window, width=event.width)
+        self.viewport_canvas.configure(scrollregion=self.viewport_canvas.bbox("all"))
+
+    def _on_mousewheel(self, event) -> None:
+        if event.num == 4:
+            self.viewport_canvas.yview_scroll(-1, "units")
+            return
+        if event.num == 5:
+            self.viewport_canvas.yview_scroll(1, "units")
+            return
+        if event.delta:
+            self.viewport_canvas.yview_scroll(int(-event.delta / 120), "units")
+
     def _apply_layout_mode(self, mode: str) -> None:
         if mode == "compact":
             self.controls_wrap.grid_columnconfigure(0, weight=1)
@@ -1001,8 +1032,8 @@ class MembershipApp:
             self.controls_wrap.grid_columnconfigure(0, weight=2)
             self.controls_wrap.grid_columnconfigure(1, weight=1)
             self.file_card.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-            self.scan_card.grid(row=2, column=0, sticky="nsew", padx=(0, 8), pady=(0, 0))
-            self.status_card.grid(row=2, column=1, sticky="nsew", padx=(8, 0), pady=(0, 0))
+            self.scan_card.grid(row=2, column=0, columnspan=1, sticky="nsew", padx=(0, 8), pady=(0, 0))
+            self.status_card.grid(row=2, column=1, columnspan=1, sticky="nsew", padx=(8, 0), pady=(0, 0))
 
             self.file_content.grid_columnconfigure(0, weight=1)
             self.file_content.grid_columnconfigure(1, weight=0)

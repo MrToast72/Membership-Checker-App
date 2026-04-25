@@ -17,6 +17,7 @@ Desktop app to verify memberships by scanning a barcode card and matching it aga
 - Loads all membership sheets in the workbook (every non-total tab), not just a single tab.
 - Uses a modern rounded UI powered by CustomTkinter.
 - Responsive layout down to `445px` app width (compact/stacked mode).
+- Full window viewport is vertically scrollable, so match results and editor controls remain reachable on short app heights.
 - Supports app icon configuration and packaged default icon assets.
 - Uses code-based icon config from `Icon.png` beside `app.py` (no in-app icon picker).
 
