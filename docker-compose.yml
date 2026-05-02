@@ -1,8 +1,6 @@
 services:
   web:
-    build:
-      context: ${MEMBERSHIP_BUILD_CONTEXT:-https://github.com/MrToast72/Membership-Checker-App.git#main}
-      dockerfile: Dockerfile
+    image: ghcr.io/mrtoast72/membership-checker-app:latest
     container_name: membership-webapp
     ports:
       - "8000:8000"
