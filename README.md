@@ -1,41 +1,40 @@
-# Membership Card Verifier
+# Membership WebApp
 
-Desktop app to verify memberships by scanning a barcode card and matching it against an Excel workbook.
+Web app to verify memberships by scanning a barcode card and matching it against a SQLite master database.
 
 ## What it does
 
-- Uses a USB barcode scanner as keyboard input (standard HID scanner behavior).
-- Loads your Excel workbook (`.xlsx` / `.xlsm`) as the membership database.
+- Runs as a web app in Docker Compose behind Traefik.
+- Uses SQLite as the master copy of all membership data.
+- Imports Excel rows into SQLite and only adds or merges missing DB data.
 - Verifies a scanned value against membership number, email, or member name.
-- Shows match details in modern result cards.
-- Writes every scan result to a CSV history log.
-- Automatically clears previous scan context when the next card starts scanning.
-- Tracks and updates `Membership Amount Used` on each verified scan.
-- Tracks scans in a local pending-usage cache and periodically syncs counts to Excel.
-- Supports undo of the last scan to correct accidental scans.
-- Includes in-app editing for member details, including `Includes Cart` and `Includes Range`.
-- Loads all membership sheets in the workbook (every non-total tab), not just a single tab.
-- Uses a modern rounded UI powered by CustomTkinter.
-- Responsive layout down to `445px` app width (compact/stacked mode).
-- Full window viewport is vertically scrollable, so match results and editor controls remain reachable on short app heights.
-- Supports app icon configuration and packaged default icon assets.
-- Uses code-based icon config from `Icon.png` beside `app.py` (no in-app icon picker).
+- Edits member details in the browser.
+- Updates membership usage in SQLite.
+- Supports basic auth via Traefik middleware.
+- Uses a simple single-container Python web server.
 
 ## Data integrity and safety
 
-- Every workbook write uses an atomic save (`.tmp` + replace) to reduce corruption risk.
-- A timestamped backup copy is created before each save in a `backups/` folder beside the workbook.
-- Save operations fail fast if the workbook changed on disk after loading, preventing silent overwrite.
+- SQLite is stored on a Docker volume.
+- Excel imports never replace populated DB fields with blank workbook values.
 - Basic input hardening is applied to block formula-injection-like values in editable text fields.
-- Public scan logs are hash-tracked and verified on startup to detect tampering.
-- A hidden internal audit trail (hash-chained) records app activity and log operations.
+- A hidden internal audit trail (hash-chained) records app activity.
 
 ## Requirements
 
-- Python 3.10+
-- Windows, macOS, or Linux
-- Dependencies from `requirements.txt` (`openpyxl`, `customtkinter`)
-- Dev dependencies for tests: `requirements-dev.txt` (`pytest`)
+- Docker and Docker Compose
+- Traefik network named `traefik`
+- Dependencies from `requirements.txt` (`openpyxl`, `Pillow`)
+
+## Run locally
+
+```bash
+docker compose up --build
+```
+
+The app listens on port `8000` inside the container and is intended to be reached through Traefik.
+
+For Portainer, deploy the stack using a prebuilt image tag instead of `build:`.
 
 ## Tests
 
@@ -66,37 +65,56 @@ Current tests cover:
   - Width is centered with letterbox fill.
   - Fill color is inferred as white or black based on the source background.
 
+## Docker Compose
+
+`docker-compose.yml` includes the Traefik labels you requested:
+
+```yaml
+networks:
+  - traefik
+
+labels:
+  - "traefik.enable=true"
+  - "traefik.docker.network=traefik"
+  - "traefik.http.routers.member-web.rule=Host(`member.cyberconnectit.com`)"
+  - "traefik.http.routers.member-web.entrypoints=websecure"
+  - "traefik.http.routers.member-web.tls.certresolver=cloudflare"
+  - "traefik.http.routers.member-web.middlewares=member-auth"
+  - "traefik.http.middlewares.member-auth.basicauth.users=..."
+  - "traefik.http.services.member-web.loadbalancer.server.port=8000"
+  - "traefik.http.services.member-web.loadbalancer.server.scheme=http"
+
+networks:
+  traefik:
+    external: true
+```
+
+## Excel import behavior
+
+- Uploading a workbook imports rows into SQLite.
+- Existing DB rows are matched by sheet and row source key.
+- Blank workbook fields do not overwrite populated DB fields.
+- Usage changes happen in SQLite, not Excel.
+
 ## Setup
 
 ```bash
 python -m venv .venv
 ```
 
-### Windows
+### Local file upload
 
 ```bash
-.venv\Scripts\activate
-pip install -r requirements.txt
-python app.py
-```
-
-### macOS / Linux
-
-```bash
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
+Open the app through your Traefik hostname and upload the workbook from the dashboard.
 ```
 
 ## Scanner setup
 
-Most USB barcode scanners act like keyboards:
+Most USB barcode scanners act like keyboards in the browser too:
 
-1. Click into the scanner input field.
+1. Focus the search field.
 2. Scan the card.
-3. If your scanner sends Enter after scan, verification runs automatically.
-
-If your scanner does not send Enter, press `Verify Membership`.
+3. Search runs from the barcode value.
 
 ## Matching behavior
 
@@ -109,19 +127,11 @@ The app attempts lookup in this order:
 
 ## Scan history log
 
-- Log file path:
-  - Windows: `%LOCALAPPDATA%\MembershipVerifier\scan_history.csv`
-  - macOS: `~/Library/Application Support/MembershipVerifier/scan_history.csv`
-  - Linux: `~/.local/share/MembershipVerifier/scan_history.csv`
-- A row is added for every scan with timestamp, scan value, result (`verified`, `multiple_matches`, `not_found`), and matched member details.
-- Additional audit entries are logged for `undo` and `edit` actions.
+- Audit events are written to the app data directory.
 
 ## Usage count syncing
 
-- Scans are first recorded in a local temp file: `pending_usage.json` in the app data folder.
-- The app flushes pending usage deltas to Excel periodically, at threshold, and on clean app close.
-- This reduces frequent workbook writes and lowers file-lock contention on Windows.
-- If the app cannot flush on close, it keeps the window open and shows an error so no usage data is lost.
+- Usage is updated in SQLite immediately.
 
 ## Internal audit trail
 
@@ -129,58 +139,7 @@ The app attempts lookup in this order:
 - It stores hash-chained records for app lifecycle events, scan/log operations, and critical state updates.
 - The app verifies chain integrity on startup and flags integrity failures.
 
-## Notes about your current workbook
+## Notes
 
-- Your workbook has a `Membership Number` column, but many rows are currently blank.
-- Best reliability comes from barcode values matching `Membership Number` in Excel.
-- If barcodes contain encoded names/emails instead, the app can still match those.
-
-## Build a Windows .exe (embedded Python/runtime)
-
-```bash
-pip install pyinstaller
-pyinstaller --noconsole --windowed --onefile --name MembershipVerifier app.py
-```
-
-Output executable will be in `dist/MembershipVerifier.exe`.
-
-Important: a Windows `.exe` must be built on Windows (PyInstaller is platform-specific).
-
-You can also run:
-
-```bat
-build_windows.bat
-```
-
-## Build Windows app in GitHub Actions
-
-This repository includes a workflow at `.github/workflows/build-windows.yml`.
-
-How to use it:
-
-1. Push your latest code to GitHub.
-2. Open GitHub -> `Actions` -> `Build Windows App`.
-3. Click `Run workflow`.
-4. Download `MembershipVerifier-windows` artifact (contains `MembershipVerifier.exe`).
-
-## Build a macOS app and DMG (optional)
-
-```bash
-pip install pyinstaller
-pyinstaller --noconsole --windowed --name MembershipVerifier app.py
-hdiutil create -volname "MembershipVerifier" -srcfolder "dist/MembershipVerifier.app" -ov -format UDZO "dist/MembershipVerifier.dmg"
-```
-
-Output app bundle will be `dist/MembershipVerifier.app` and DMG will be `dist/MembershipVerifier.dmg`.
-
-You can also run:
-
-```bash
-chmod +x build_mac.sh
-./build_mac.sh
-```
-
-## Embedded runtime note
-
-- PyInstaller bundles Python + dependencies into the app/exe, so target machines do not need Python or pip installed.
-- You still need to distribute your Excel file with the app, or place it in the same folder as the executable/app.
+- If you want Traefik-only auth, leave `MEMBER_BASIC_AUTH_USER` and `MEMBER_BASIC_AUTH_PASS` empty.
+- If you want app-layer auth too, set both env vars in Portainer.
