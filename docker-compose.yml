@@ -1,0 +1,11 @@
+services:
+  web:
+    build: .
+    container_name: membership-webapp
+    ports:
+      - "8000:8000"
+    environment:
+      MEMBERSHIP_DB_PATH: /data/membership.sqlite3
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

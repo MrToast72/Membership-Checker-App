@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Membership Checker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Membership Checker</p>
+        <h1>Scan, verify, and sync membership data.</h1>
+        <p class="subtitle">Upload an Excel workbook to sync data into SQLite, then scan a membership number, email, or name.</p>
+      </div>
+      <div class="hero-meta">
+        <div class="meta-label">Records in database</div>
+        <div class="meta-value">{{ db_count }}</div>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="card">
+        <h2>Sync Excel Workbook</h2>
+        <p class="muted">Upload the latest membership workbook. Missing entries are added to the database, and existing records are updated to match the sheet.</p>
+        {% if upload_error %}
+          <div class="alert alert-error">{{ upload_error }}</div>
+        {% endif %}
+        {% if sync_summary %}
+          <div class="alert alert-success">
+            Synced {{ sync_summary.total }} rows: {{ sync_summary.inserted }} new, {{ sync_summary.updated }} updated.
+          </div>
+        {% endif %}
+        <form action="{{ url_for('upload_excel') }}" method="post" enctype="multipart/form-data" class="stack">
+          <input type="file" name="excel_file" accept=".xlsx,.xlsm" required />
+          <button type="submit">Upload &amp; Sync</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Scan Membership</h2>
+        <p class="muted">Paste or scan the barcode value, email, or name.</p>
+        {% if scan_error %}
+          <div class="alert alert-error">{{ scan_error }}</div>
+        {% endif %}
+        <form action="{{ url_for('scan_membership') }}" method="post" class="stack">
+          <input type="text" name="scan_text" placeholder="Membership number, email, or name" value="{{ scan_text or '' }}" required />
+          <button type="submit">Scan</button>
+        </form>
+      </div>
+    </section>
+
+    {% if results is not none %}
+      <section class="card results">
+        <h2>Scan Results</h2>
+        {% if results %}
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Membership #</th>
+                <th>Type</th>
+                <th>Includes Cart</th>
+                <th>Includes Range</th>
+                <th>Usage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for record in results %}
+                <tr>
+                  <td data-label="Name">{{ record.display_name }}</td>
+                  <td data-label="Email">{{ record.email }}</td>
+                  <td data-label="Membership #">{{ record.membership_number or '—' }}</td>
+                  <td data-label="Type">{{ record.membership_type }}</td>
+                  <td data-label="Includes Cart">{{ record.includes_cart }}</td>
+                  <td data-label="Includes Range">{{ record.includes_range }}</td>
+                  <td data-label="Usage">{{ record.membership_amount_used }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No matching membership found.</p>
+        {% endif %}
+      </section>
+    {% endif %}
+  </main>
+</body>
+</html>

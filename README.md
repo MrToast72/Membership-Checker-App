@@ -72,6 +72,20 @@ Current tests cover:
 python -m venv .venv
 ```
 
+## Web app (Docker)
+
+Run the membership checker as a web app with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Then open `http://localhost:8000` (or route the container through your reverse proxy so it is served via
+`https://member.cyberconnectit.com`).
+
+Uploads sync the workbook into SQLite at `./data/membership.sqlite3`. You can override the database path by setting
+`MEMBERSHIP_DB_PATH`.
+
 ### Windows
 
 ```bash
