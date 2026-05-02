@@ -654,97 +654,100 @@ class MembershipWebApp:
 <title>{html.escape(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *:{{box-sizing:border-box;margin:0;padding:0}}
 :root{{
-  --primary:#2563eb;
-  --primary-hover:#1d4ed8;
-  --primary-light:#eff6ff;
+  --primary:#6366f1;
+  --primary-hover:#4f46e5;
+  --primary-light:#eef2ff;
+  --accent:#8b5cf6;
   --success:#10b981;
   --warning:#f59e0b;
   --danger:#ef4444;
-  --gray-50:#f9fafb;
-  --gray-100:#f3f4f6;
-  --gray-200:#e5e7eb;
-  --gray-300:#d1d5db;
-  --gray-400:#9ca3af;
-  --gray-500:#6b7280;
-  --gray-600:#4b5563;
-  --gray-700:#374151;
-  --gray-800:#1f2937;
-  --gray-900:#111827;
-  --shadow-sm:0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow:0 1px 3px 0 rgb(0 0 0 / 0.1),0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md:0 4px 6px -1px rgb(0 0 0 / 0.1),0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --radius:12px;
-  --radius-sm:8px;
+  --gray-50:#f8fafc;
+  --gray-100:#f1f5f9;
+  --gray-200:#e2e8f0;
+  --gray-300:#cbd5e1;
+  --gray-400:#94a3b8;
+  --gray-500:#64748b;
+  --gray-600:#475569;
+  --gray-700:#334155;
+  --gray-800:#1e293b;
+  --gray-900:#0f172a;
+  --shadow-xs:0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-sm:0 4px 6px -1px rgb(0 0 0 / 0.06),0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow:0 10px 15px -3px rgb(0 0 0 / 0.08),0 4px 6px -4px rgb(0 0 0 / 0.08);
+  --shadow-lg:0 20px 25px -5px rgb(0 0 0 / 0.1),0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --radius:24px;
+  --radius-lg:20px;
+  --radius-md:16px;
+  --radius-sm:12px;
+  --radius-xs:8px;
 }}
-body{{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);color:var(--gray-800);min-height:100vh;line-height:1.5}}
-.container{{max-width:1280px;margin:0 auto;padding:0 24px}}
-header{{background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);padding:20px 0;color:#fff;box-shadow:var(--shadow-md);position:relative;overflow:hidden}}
-header::before{{content:'';position:absolute;top:0;right:0;width:300px;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.05));pointer-events:none}}
-header .container{{display:flex;align-items:center;justify-content:space-between}}
-.logo{{display:flex;align-items:center;gap:12px}}
-.logo-icon{{width:40px;height:40px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}}
-.logo-text{{font-size:22px;font-weight:700;letter-spacing:-0.5px}}
-.logo-version{{font-size:12px;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:20px;font-weight:500}}
-main{{padding:32px 0}}
-.hero{{background:#fff;border-radius:var(--radius);padding:32px;box-shadow:var(--shadow-md);margin-bottom:24px;position:relative;overflow:hidden}}
-.hero::before{{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#3b82f6,#8b5cf6,#06b6d4)}}
-.hero-content{{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px}}
-.hero-title{{font-size:28px;font-weight:700;color:var(--gray-900);margin-bottom:8px}}
-.hero-subtitle{{color:var(--gray-500);font-size:15px;max-width:600px}}
-.hero-actions{{display:flex;gap:12px}}
-.btn{{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:var(--radius-sm);font-weight:600;font-size:14px;text-decoration:none;transition:all 0.2s;border:none;cursor:pointer}}
-.btn-primary{{background:var(--primary);color:#fff}}
-.btn-primary:hover{{background:var(--primary-hover);transform:translateY(-1px);box-shadow:var(--shadow-md)}}
-.btn-secondary{{background:var(--gray-100);color:var(--gray-700)}}
-.btn-secondary:hover{{background:var(--gray-200)}}
-.btn-sm{{padding:8px 14px;font-size:13px}}
-.stats-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}}
-.stat-card{{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);border:1px solid var(--gray-100);transition:transform 0.2s,box-shadow 0.2s}}
-.stat-card:hover{{transform:translateY(-2px);box-shadow:var(--shadow-md)}}
-.stat-label{{color:var(--gray-500);font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}}
-.stat-value{{font-size:32px;font-weight:700;color:var(--gray-900)}}
+body{{font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;background:#f8fafc;color:var(--gray-800);min-height:100vh;line-height:1.6}}
+.container{{max-width:1200px;margin:0 auto;padding:0 24px}}
+header{{background:#fff;border-bottom:1px solid var(--gray-200);position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);background:rgba(255,255,255,0.9)}}
+header .container{{display:flex;align-items:center;justify-content:space-between;padding:16px 24px}}
+.logo{{display:flex;align-items:center;gap:14px}}
+.logo-icon{{width:48px;height:48px;background:linear-gradient(135deg,var(--primary),var(--accent));border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;color:#fff;box-shadow:0 4px 12px rgba(99,102,241,0.3)}}
+.logo-text{{font-size:24px;font-weight:800;letter-spacing:-0.5px;background:linear-gradient(135deg,var(--gray-900),var(--gray-700));-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+.logo-version{{font-size:12px;background:var(--gray-100);padding:6px 12px;border-radius:20px;font-weight:600;color:var(--gray-500)}}
+main{{padding:40px 0}}
+.hero{{background:linear-gradient(135deg,#fff 0%,#fafbff 100%);border-radius:var(--radius);padding:40px;box-shadow:var(--shadow-lg);margin-bottom:32px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,0.8)}}
+.hero::before{{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,var(--primary),var(--accent),#06b6d4)}}
+.hero::after{{content:'';position:absolute;top:-50%;right:-20%;width:400px;height:400px;background:radial-gradient(circle,rgba(99,102,241,0.08) 0%,transparent 70%);pointer-events:none}}
+.hero-content{{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:24px;position:relative;z-index:1}}
+.hero-title{{font-size:36px;font-weight:800;color:var(--gray-900);margin-bottom:12px;letter-spacing:-1px}}
+.hero-subtitle{{color:var(--gray-500);font-size:18px;max-width:600px;line-height:1.7}}
+.hero-actions{{display:flex;gap:16px}}
+.btn{{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:16px 28px;border-radius:var(--radius-sm);font-weight:700;font-size:15px;text-decoration:none;transition:all 0.25s cubic-bezier(0.4,0,0.2,1);border:none;cursor:pointer;box-shadow:var(--shadow-sm)}}
+.btn:hover{{transform:translateY(-2px);box-shadow:var(--shadow)}}
+.btn-primary{{background:linear-gradient(135deg,var(--primary),#4f46e5);color:#fff}}
+.btn-primary:hover{{box-shadow:0 8px 20px rgba(99,102,241,0.35)}}
+.btn-secondary{{background:#fff;color:var(--gray-700);border:2px solid var(--gray-200)}}
+.btn-secondary:hover{{border-color:var(--gray-300);background:var(--gray-50)}}
+.btn-sm{{padding:12px 20px;font-size:14px}}
+.stats-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-bottom:32px}}
+.stat-card{{background:#fff;border-radius:var(--radius-lg);padding:28px;box-shadow:var(--shadow-sm);border:1px solid var(--gray-100);transition:all 0.3s cubic-bezier(0.4,0,0.2,1)}}
+.stat-card:hover{{transform:translateY(-4px);box-shadow:var(--shadow-lg);border-color:var(--primary)}}
+.stat-label{{color:var(--gray-400);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}}
+.stat-value{{font-size:42px;font-weight:800;color:var(--gray-900);letter-spacing:-1px}}
 .stat-value.success{{color:var(--success)}}
 .grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}}
 @media (max-width:900px){{.grid{{grid-template-columns:1fr}}}}
-.card{{background:#fff;border-radius:var(--radius);padding:24px;box-shadow:var(--shadow-sm);border:1px solid var(--gray-100)}}
-.card-header{{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}}
-.card-title{{font-size:18px;font-weight:600;color:var(--gray-900)}}
-.card-description{{color:var(--gray-500);font-size:14px;margin-bottom:16px;line-height:1.6}}
+.card{{background:#fff;border-radius:var(--radius-lg);padding:32px;box-shadow:var(--shadow-sm);border:1px solid var(--gray-100)}}
+.card-header{{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}}
+.card-title{{font-size:22px;font-weight:700;color:var(--gray-900)}}
+.card-description{{color:var(--gray-500);font-size:15px;margin-bottom:24px;line-height:1.7}}
 .full{{grid-column:1/-1}}
-.form-group{{margin-bottom:16px}}
-.form-label{{display:block;font-size:14px;font-weight:500;color:var(--gray-700);margin-bottom:6px}}
-.form-input,.form-select{{width:100%;padding:12px 14px;border:1px solid var(--gray-200);border-radius:var(--radius-sm);font-size:14px;transition:border-color 0.2s,box-shadow 0.2s;background:#fff}}
-.form-input:focus,.form-select:focus{{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,0.1)}}
+.form-group{{margin-bottom:20px}}
+.form-label{{display:block;font-size:14px;font-weight:600;color:var(--gray-700);margin-bottom:8px}}
+.form-input,.form-select{{width:100%;padding:16px 18px;border:2px solid var(--gray-200);border-radius:var(--radius-sm);font-size:15px;transition:all 0.2s;background:#fff;font-family:inherit}}
+.form-input:focus,.form-select:focus{{outline:none;border-color:var(--primary);box-shadow:0 0 0 4px rgba(99,102,241,0.1)}}
 .form-input::placeholder{{color:var(--gray-400)}}
-.form-row{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}}
-.form-actions{{display:flex;gap:12px;margin-top:20px}}
-.member-card{{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);border:1px solid var(--gray-100);margin-bottom:16px;transition:all 0.2s}}
-.member-card:hover{{border-color:var(--primary);box-shadow:var(--shadow-md)}}
-.member-card.selected{{border-color:var(--primary);background:var(--primary-light)}}
-.member-name{{font-size:18px;font-weight:600;color:var(--gray-900);margin-bottom:4px}}
-.member-meta{{color:var(--gray-500);font-size:14px}}
-.member-details{{display:flex;flex-wrap:wrap;gap:16px;margin:12px 0;padding:12px;background:var(--gray-50);border-radius:var(--radius-sm);font-size:13px}}
-.member-detail{{display:flex;align-items:center;gap:6px}}
-.member-detail-label{{color:var(--gray-500)}}
-.member-detail-value{{font-weight:500;color:var(--gray-700)}}
-.member-actions{{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-100)}}
-.member-edit-form{{margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200)}}
-.msg{{padding:16px 20px;border-radius:var(--radius-sm);margin-bottom:20px;font-size:14px}}
-.msg-success{{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}}
-.msg-error{{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}}
-.msg-info{{background:var(--primary-light);color:#1e40af;border:1px solid:#bfdbfe}}
-.empty-state{{text-align:center;padding:48px 24px;color:var(--gray-500)}}
-.empty-state-icon{{font-size:48px;margin-bottom:16px;opacity:0.5}}
-.empty-state-text{{font-size:16px}}
-.section{{margin-bottom:32px}}
-.section-title{{font-size:20px;font-weight:600;color:var(--gray-900);margin-bottom:16px}}
-.file-drop{{border:2px dashed var(--gray-300);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--gray-50)}}
-.file-drop:hover{{border-color:var(--primary);background:var(--primary-light)}}
-.file-drop-input{{display:none}}
+.form-row{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px}}
+.form-actions{{display:flex;gap:12px;margin-top:24px}}
+.member-card{{background:#fff;border-radius:var(--radius-lg);padding:28px;box-shadow:var(--shadow-sm);border:2px solid var(--gray-100);margin-bottom:20px;transition:all 0.3s cubic-bezier(0.4,0,0.2,1)}}
+.member-card:hover{{border-color:var(--primary);box-shadow:var(--shadow-lg)}}
+.member-card.selected{{border-color:var(--primary);background:linear-gradient(135deg,var(--primary-light),#fff);box-shadow:var(--shadow)}}
+.member-name{{font-size:22px;font-weight:700;color:var(--gray-900);margin-bottom:8px}}
+.member-meta{{color:var(--gray-500);font-size:15px;margin-bottom:16px}}
+.member-details{{display:flex;flex-wrap:wrap;gap:20px;margin:20px 0;padding:20px;background:var(--gray-50);border-radius:var(--radius-sm);font-size:14px;border:1px solid var(--gray-100)}}
+.member-detail{{display:flex;align-items:center;gap:8px}}
+.member-detail-label{{color:var(--gray-400)}}
+.member-detail-value{{font-weight:600;color:var(--gray-700)}}
+.member-actions{{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px;padding-top:20px;border-top:1px solid var(--gray-100)}}
+.member-edit-form{{margin-top:24px;padding-top:24px;border-top:2px solid var(--gray-100)}}
+.msg{{padding:20px 24px;border-radius:var(--radius-sm);margin-bottom:24px;font-size:15px;font-weight:500}}
+.msg-success{{background:linear-gradient(135deg,#ecfdf5,#d1fae5);color:#065f46;border:1px solid #a7f3d0;box-shadow:var(--shadow-xs)}}
+.msg-error{{background:linear-gradient(135deg,#fef2f2,#fee2e2);color:#991b1b;border:1px solid #fecaca;box-shadow:var(--shadow-xs)}}
+.msg-info{{background:linear-gradient(135deg,var(--primary-light),#e0e7ff);color:#1e40af;border:1px solid:#c7d2fe;box-shadow:var(--shadow-xs)}}
+.empty-state{{text-align:center;padding:64px 32px;color:var(--gray-400);background:#fff;border-radius:var(--radius-lg);border:2px dashed var(--gray-200)}}
+.empty-state-icon{{font-size:56px;margin-bottom:20px;opacity:0.6}}
+.empty-state-text{{font-size:18px;font-weight:500}}
+.section{{margin-bottom:40px}}
+.section-title{{font-size:24px;font-weight:700;color:var(--gray-900);margin-bottom:20px}}
 </style>
 </head>
 <body>
@@ -1159,11 +1162,13 @@ class AuthenticatedHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if not self._require_auth():
             return
+        self.get_csrf_token()
         self.server.app.handle(self)  # type: ignore[attr-defined]
 
     def do_POST(self) -> None:
         if not self._require_auth():
             return
+        self.get_csrf_token()
         self.server.app.handle(self)  # type: ignore[attr-defined]
 
     def log_message(self, fmt: str, *args) -> None:
