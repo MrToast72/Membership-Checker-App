@@ -1,6 +1,6 @@
 services:
   web:
-    build: .
+    image: ghcr.io/mrtoast72/membership-checker-app:latest
     container_name: membership-webapp
     ports:
       - "8000:8000"
@@ -8,4 +8,18 @@ services:
       MEMBERSHIP_DB_PATH: /data/membership.sqlite3
     volumes:
       - ./data:/data
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.member-web.rule=Host(`${MEMBERSHIP_HOSTNAME:-member.cyberconnectit.com}`)"
+      - "traefik.http.routers.member-web.entrypoints=websecure"
+      - "traefik.http.routers.member-web.tls.certresolver=cloudflare"
+      - "traefik.http.services.member-web.loadbalancer.server.port=8000"
+      - "traefik.http.services.member-web.loadbalancer.server.scheme=http"
     restart: unless-stopped
+
+networks:
+  traefik:
+    external: true
