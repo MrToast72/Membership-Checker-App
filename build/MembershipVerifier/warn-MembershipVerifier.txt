@@ -14,7 +14,7 @@ Types of import:
 IMPORTANT: Do NOT post this list to the issue-tracker. Use it as a basis for
             tracking down the missing module yourself. Thanks!
 
-missing module named _winapi - imported by encodings (delayed, conditional, optional), ntpath (optional), shutil (conditional), subprocess (conditional), multiprocessing.connection (optional), multiprocessing.spawn (delayed, conditional), multiprocessing.reduction (conditional), multiprocessing.shared_memory (conditional), multiprocessing.heap (conditional), multiprocessing.popen_spawn_win32 (top-level), asyncio.windows_events (top-level), asyncio.windows_utils (top-level), mimetypes (optional)
+missing module named _winapi - imported by encodings (delayed, conditional, optional), ntpath (optional), shutil (conditional), subprocess (conditional), mimetypes (optional), multiprocessing.connection (optional), multiprocessing.spawn (delayed, conditional), multiprocessing.reduction (conditional), multiprocessing.shared_memory (conditional), multiprocessing.heap (conditional), multiprocessing.popen_spawn_win32 (top-level), asyncio.windows_events (top-level), asyncio.windows_utils (top-level)
 missing module named msvcrt - imported by subprocess (optional), multiprocessing.spawn (delayed, conditional), multiprocessing.popen_spawn_win32 (top-level), asyncio.windows_events (top-level), asyncio.windows_utils (top-level), getpass (optional)
 missing module named urllib.urlopen - imported by urllib (delayed, optional), lxml.html (delayed, optional)
 missing module named urllib.urlencode - imported by urllib (delayed, optional), lxml.html (delayed, optional)
@@ -22,7 +22,7 @@ missing module named vms_lib - imported by platform (delayed, optional)
 missing module named 'java.lang' - imported by platform (delayed, optional)
 missing module named java - imported by platform (delayed)
 missing module named _winreg - imported by platform (delayed, optional)
-missing module named winreg - imported by importlib._bootstrap_external (conditional), platform (delayed, optional), darkdetect._windows_detect (top-level), mimetypes (optional), urllib.request (delayed, conditional, optional)
+missing module named winreg - imported by importlib._bootstrap_external (conditional), mimetypes (optional), platform (delayed, optional), urllib.request (delayed, conditional, optional)
 missing module named _wmi - imported by platform (optional)
 excluded module named _frozen_importlib - imported by importlib (optional), importlib.abc (optional), zipimport (top-level)
 missing module named _frozen_importlib_external - imported by importlib._bootstrap (delayed), importlib (optional), importlib.abc (optional), zipimport (top-level)
@@ -162,5 +162,3 @@ missing module named html5lib - imported by lxml.html._html5builder (top-level),
 missing module named lxml_html_clean - imported by lxml.html.clean (optional)
 missing module named cssselect - imported by lxml.cssselect (optional)
 missing module named openpyxl.tests - imported by openpyxl.reader.excel (optional)
-missing module named PyObjCTools - imported by darkdetect._mac_detect (optional)
-missing module named Foundation - imported by darkdetect._mac_detect (optional)
