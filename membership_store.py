@@ -443,7 +443,7 @@ class MembershipStore:
 
     def _needs_update(self, row: sqlite3.Row, record: MemberRecord, norms: dict[str, str]) -> bool:
         return any(
-            [
+            (
                 (row["first_name"] or "") != record.first_name,
                 (row["last_name"] or "") != record.last_name,
                 (row["email"] or "") != record.email,
@@ -457,5 +457,5 @@ class MembershipStore:
                 (row["membership_number_norm"] or "") != norms["membership_number_norm"],
                 (row["email_norm"] or "") != norms["email_norm"],
                 (row["name_norm"] or "") != norms["name_norm"],
-            ]
+            )
         )
