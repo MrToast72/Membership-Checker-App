@@ -86,11 +86,13 @@ By default the compose file builds directly from GitHub (`main`). To build from 
 MEMBERSHIP_BUILD_CONTEXT=. docker compose up --build
 ```
 
-To pin a specific tag or commit, set `MEMBERSHIP_BUILD_CONTEXT` to a Git URL that includes `#<ref>`.
+To pin a specific tag or commit, set `MEMBERSHIP_BUILD_CONTEXT` to a Git URL that includes `#<ref>`. If
+you are using a fork, point `MEMBERSHIP_BUILD_CONTEXT` at your fork URL.
 
 The compose file includes Traefik labels and attaches to the external `traefik` network for
-`https://member.cyberconnectit.com`. Ensure the network exists (and Traefik is running), or remove the
-labels/network if you are not using Traefik. You can create the network with:
+`https://member.cyberconnectit.com`. Set `MEMBERSHIP_HOSTNAME` to route a different domain. Ensure the
+network exists (and Traefik is running), or remove the labels/network if you are not using Traefik. You
+can create the network with:
 
 ```bash
 docker network create traefik
