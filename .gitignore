@@ -1,0 +1,16 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+.venv/
+
+build/
+dist/
+
+backups/
+pending_usage.json
+
+*.xlsx
+
+MembershipVerifier.spec

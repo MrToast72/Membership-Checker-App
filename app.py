@@ -397,6 +397,9 @@ class MembershipDatabase:
             raise RuntimeError("Member update failed.")
         return self._record_from_row(row)
 
+    def upsert_new_member(self, payload: dict[str, str | int]) -> tuple[str, MemberRecord]:
+        return self.upsert_source_row(payload)
+
     def increment_usage(self, member_id: int, delta: int) -> MemberRecord:
         record = self.get_record(member_id)
         if not record:
@@ -644,37 +647,119 @@ class MembershipWebApp:
 
     def html_page(self, title: str, body: str) -> bytes:
         page = f"""<!doctype html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-<meta charset=\"utf-8\">
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-body{{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f4f7fb;color:#13253a}}
-header{{padding:18px 20px;background:#173a66;color:#fff}}
-main{{max-width:1200px;margin:0 auto;padding:20px}}
-.grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
-.card{{background:#fff;border:1px solid #dce7f6;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(16,24,40,.04)}}
-.full{{grid-column:1/-1}}
-input,button,select,textarea{{font:inherit;padding:10px 12px;border:1px solid #cbd7e6;border-radius:10px}}
-input[type=file]{{padding:8px}}
-button{{background:#2f7cf6;color:#fff;border:none;cursor:pointer}}
-button.secondary{{background:#e7eef9;color:#163046}}
-button.danger{{background:#d9534f}}
-.row{{display:flex;gap:10px;flex-wrap:wrap;align-items:end}}
-.field{{display:flex;flex-direction:column;gap:6px;min-width:160px;flex:1}}
-.muted{{color:#5d7288;font-size:14px}}
-.result{{border-top:1px solid #edf2f8;padding-top:14px;margin-top:14px}}
-.member{{padding:12px;border:1px solid #e3ebf5;border-radius:12px;margin-top:12px}}
-.stats{{display:flex;gap:12px;flex-wrap:wrap}}
-.pill{{background:#edf4ff;border-radius:999px;padding:6px 10px}}
-.msg{{padding:10px 12px;border-radius:10px;margin-bottom:12px;background:#eef6ff;border:1px solid #cfe0fa}}
+*:{{box-sizing:border-box;margin:0;padding:0}}
+:root{{
+  --primary:#2563eb;
+  --primary-hover:#1d4ed8;
+  --primary-light:#eff6ff;
+  --success:#10b981;
+  --warning:#f59e0b;
+  --danger:#ef4444;
+  --gray-50:#f9fafb;
+  --gray-100:#f3f4f6;
+  --gray-200:#e5e7eb;
+  --gray-300:#d1d5db;
+  --gray-400:#9ca3af;
+  --gray-500:#6b7280;
+  --gray-600:#4b5563;
+  --gray-700:#374151;
+  --gray-800:#1f2937;
+  --gray-900:#111827;
+  --shadow-sm:0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow:0 1px 3px 0 rgb(0 0 0 / 0.1),0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md:0 4px 6px -1px rgb(0 0 0 / 0.1),0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --radius:12px;
+  --radius-sm:8px;
+}}
+body{{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);color:var(--gray-800);min-height:100vh;line-height:1.5}}
+.container{{max-width:1280px;margin:0 auto;padding:0 24px}}
+header{{background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);padding:20px 0;color:#fff;box-shadow:var(--shadow-md);position:relative;overflow:hidden}}
+header::before{{content:'';position:absolute;top:0;right:0;width:300px;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.05));pointer-events:none}}
+header .container{{display:flex;align-items:center;justify-content:space-between}}
+.logo{{display:flex;align-items:center;gap:12px}}
+.logo-icon{{width:40px;height:40px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}}
+.logo-text{{font-size:22px;font-weight:700;letter-spacing:-0.5px}}
+.logo-version{{font-size:12px;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:20px;font-weight:500}}
+main{{padding:32px 0}}
+.hero{{background:#fff;border-radius:var(--radius);padding:32px;box-shadow:var(--shadow-md);margin-bottom:24px;position:relative;overflow:hidden}}
+.hero::before{{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#3b82f6,#8b5cf6,#06b6d4)}}
+.hero-content{{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px}}
+.hero-title{{font-size:28px;font-weight:700;color:var(--gray-900);margin-bottom:8px}}
+.hero-subtitle{{color:var(--gray-500);font-size:15px;max-width:600px}}
+.hero-actions{{display:flex;gap:12px}}
+.btn{{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:var(--radius-sm);font-weight:600;font-size:14px;text-decoration:none;transition:all 0.2s;border:none;cursor:pointer}}
+.btn-primary{{background:var(--primary);color:#fff}}
+.btn-primary:hover{{background:var(--primary-hover);transform:translateY(-1px);box-shadow:var(--shadow-md)}}
+.btn-secondary{{background:var(--gray-100);color:var(--gray-700)}}
+.btn-secondary:hover{{background:var(--gray-200)}}
+.btn-sm{{padding:8px 14px;font-size:13px}}
+.stats-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}}
+.stat-card{{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);border:1px solid var(--gray-100);transition:transform 0.2s,box-shadow 0.2s}}
+.stat-card:hover{{transform:translateY(-2px);box-shadow:var(--shadow-md)}}
+.stat-label{{color:var(--gray-500);font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}}
+.stat-value{{font-size:32px;font-weight:700;color:var(--gray-900)}}
+.stat-value.success{{color:var(--success)}}
+.grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}}
 @media (max-width:900px){{.grid{{grid-template-columns:1fr}}}}
+.card{{background:#fff;border-radius:var(--radius);padding:24px;box-shadow:var(--shadow-sm);border:1px solid var(--gray-100)}}
+.card-header{{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}}
+.card-title{{font-size:18px;font-weight:600;color:var(--gray-900)}}
+.card-description{{color:var(--gray-500);font-size:14px;margin-bottom:16px;line-height:1.6}}
+.full{{grid-column:1/-1}}
+.form-group{{margin-bottom:16px}}
+.form-label{{display:block;font-size:14px;font-weight:500;color:var(--gray-700);margin-bottom:6px}}
+.form-input,.form-select{{width:100%;padding:12px 14px;border:1px solid var(--gray-200);border-radius:var(--radius-sm);font-size:14px;transition:border-color 0.2s,box-shadow 0.2s;background:#fff}}
+.form-input:focus,.form-select:focus{{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,0.1)}}
+.form-input::placeholder{{color:var(--gray-400)}}
+.form-row{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}}
+.form-actions{{display:flex;gap:12px;margin-top:20px}}
+.member-card{{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);border:1px solid var(--gray-100);margin-bottom:16px;transition:all 0.2s}}
+.member-card:hover{{border-color:var(--primary);box-shadow:var(--shadow-md)}}
+.member-card.selected{{border-color:var(--primary);background:var(--primary-light)}}
+.member-name{{font-size:18px;font-weight:600;color:var(--gray-900);margin-bottom:4px}}
+.member-meta{{color:var(--gray-500);font-size:14px}}
+.member-details{{display:flex;flex-wrap:wrap;gap:16px;margin:12px 0;padding:12px;background:var(--gray-50);border-radius:var(--radius-sm);font-size:13px}}
+.member-detail{{display:flex;align-items:center;gap:6px}}
+.member-detail-label{{color:var(--gray-500)}}
+.member-detail-value{{font-weight:500;color:var(--gray-700)}}
+.member-actions{{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-100)}}
+.member-edit-form{{margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200)}}
+.msg{{padding:16px 20px;border-radius:var(--radius-sm);margin-bottom:20px;font-size:14px}}
+.msg-success{{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}}
+.msg-error{{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}}
+.msg-info{{background:var(--primary-light);color:#1e40af;border:1px solid:#bfdbfe}}
+.empty-state{{text-align:center;padding:48px 24px;color:var(--gray-500)}}
+.empty-state-icon{{font-size:48px;margin-bottom:16px;opacity:0.5}}
+.empty-state-text{{font-size:16px}}
+.section{{margin-bottom:32px}}
+.section-title{{font-size:20px;font-weight:600;color:var(--gray-900);margin-bottom:16px}}
+.file-drop{{border:2px dashed var(--gray-300);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--gray-50)}}
+.file-drop:hover{{border-color:var(--primary);background:var(--primary-light)}}
+.file-drop-input{{display:none}}
 </style>
 </head>
 <body>
-<header><strong>Membership WebApp</strong> <span class=\"muted\">v{APP_VERSION}</span></header>
-<main>{body}</main>
+<header>
+<div class="container">
+<div class="logo">
+<div class="logo-icon">M</div>
+<span class="logo-text">Membership Manager</span>
+</div>
+<span class="logo-version">v{APP_VERSION}</span>
+</div>
+</header>
+<main>
+<div class="container">{body}</div>
+</main>
 </body>
 </html>"""
         return page.encode("utf-8")
@@ -691,72 +776,128 @@ button.danger{{background:#d9534f}}
             sync_html = f"<div class='pill'>Last sync: +{self.last_sync.inserted} inserted, {self.last_sync.merged} merged from {html.escape(self.last_sync_name or 'upload')}</div>"
         message_html = f"<div class='msg'>{html.escape(message)}</div>" if message else ""
         cards = "".join(
-            self.render_member_card(record, selected_id=selected.id if selected else None) for record in records
-        ) or "<p class='muted'>Search for a member or upload an Excel file to seed SQLite.</p>"
+            self.render_member_card(record, selected_id=selected.id if selected else None, csrf_token=csrf_token) for record in records
+        ) or """<div class='empty-state'>
+<div class='empty-state-icon'>📋</div>
+<div class='empty-state-text'>Search for a member or import an Excel file to get started</div>
+</div>"""
+        msg_class = "msg-success" if "error" not in message.lower() and "failed" not in message.lower() else "msg-error"
         body = f"""
-{message_html}
-<div class='stats'>
-  <div class='pill'>Members: {stats['members']}</div>
-  <div class='pill'>Usage total: {stats['usage']}</div>
-  {sync_html}
+<div class='hero'>
+<div class='hero-content'>
+<div>
+<div class='hero-title'>Membership Manager</div>
+<div class='hero-subtitle'>Import Excel files, search members, track usage, and manage your database from one modern interface.</div>
 </div>
-<div class='grid' style='margin-top:16px'>
-  <section class='card'>
-    <h2>Sync Excel</h2>
-    <p class='muted'>Upload the workbook; any missing rows are inserted into SQLite and existing rows are merged without overwriting populated DB values.</p>
-    <form method='post' action='/sync' enctype='multipart/form-data'>
-      {self.render_form_token(csrf_token)}
-      <div class='row'>
-        <div class='field'><label>Workbook</label><input type='file' name='workbook' accept='.xlsx,.xlsm' required></div>
-        <button type='submit'>Import</button>
-      </div>
-    </form>
-  </section>
-  <section class='card'>
-    <h2>Search / Scan</h2>
-    <form method='get' action='/'>
-      <div class='row'>
-        <div class='field'><label>Scan value</label><input name='q' value='{html.escape(q)}' placeholder='Membership number, email, or name'></div>
-        <button type='submit'>Search</button>
-      </div>
-    </form>
-    <p class='muted'>This uses the database as the master copy.</p>
-  </section>
-  <section class='card full'>
-    <h2>Results</h2>
-    {cards}
-  </section>
+<div class='hero-actions'>
+<a href='/export/sqlite' class='btn btn-primary'>📥 Export Database</a>
+<a href='/?message=Ready for your next scan' class='btn btn-secondary'>🔄 Refresh</a>
+</div>
+</div>
+</div>
+{message_html}
+<div class='stats-grid'>
+<div class='stat-card'>
+<div class='stat-label'>Total Members</div>
+<div class='stat-value'>{stats['members']}</div>
+</div>
+<div class='stat-card'>
+<div class='stat-label'>Total Usage</div>
+<div class='stat-value success'>{stats['usage']}</div>
+</div>
+{sync_html}
+</div>
+<div class='grid'>
+<section class='card'>
+<div class='card-header'>
+<div class='card-title'>📊 Sync Excel</div>
+</div>
+<p class='card-description'>Upload an Excel workbook to import or update members. New records are inserted, existing records are merged.</p>
+<form method='post' action='/sync' enctype='multipart/form-data'>
+{self.render_form_token(csrf_token)}
+<div class='form-group'>
+<label class='form-label'>Select Workbook</label>
+<input type='file' name='workbook' accept='.xlsx,.xlsm' class='form-input' required>
+</div>
+<button type='submit' class='btn btn-primary'>Import Members</button>
+</form>
+</section>
+<section class='card'>
+<div class='card-header'>
+<div class='card-title'>🔍 Search / Scan</div>
+</div>
+<p class='card-description'>Search by membership number, email, or member name.</p>
+<form method='get' action='/'>
+<div class='form-group'>
+<label class='form-label'>Search Value</label>
+<input name='q' value='{html.escape(q)}' class='form-input' placeholder='Enter membership number, email, or name'>
+</div>
+<button type='submit' class='btn btn-primary'>Search</button>
+</form>
+</section>
+<section class='card full'>
+<div class='card-header'>
+<div class='card-title'>➕ Add New Member</div>
+</div>
+<form method='post' action='/members/create'>
+{self.render_form_token(csrf_token)}
+<div class='form-row'>
+<div class='form-group'><label class='form-label'>First Name</label><input name='first_name' class='form-input' value=''></div>
+<div class='form-group'><label class='form-label'>Last Name</label><input name='last_name' class='form-input' value=''></div>
+<div class='form-group'><label class='form-label'>Email</label><input name='email' class='form-input' value='' type='email'></div>
+<div class='form-group'><label class='form-label'>Membership Type</label><input name='membership_type' class='form-input' value=''></div>
+<div class='form-group'><label class='form-label'>Price Paid</label><input name='price_paid' class='form-input' value=''></div>
+<div class='form-group'><label class='form-label'>Membership Number</label><input name='membership_number' class='form-input' value=''></div>
+<div class='form-group'><label class='form-label'>Includes Cart</label><select name='includes_cart' class='form-select'><option selected>No</option><option>Yes</option></select></div>
+<div class='form-group'><label class='form-label'>Includes Range</label><select name='includes_range' class='form-select'><option selected>No</option><option>Yes</option></select></div>
+</div>
+<div class='form-actions'><button type='submit' class='btn btn-primary'>Create Member</button></div>
+</form>
+</section>
+<section class='card full'>
+<div class='card-header'>
+<div class='card-title'>📋 Results</div>
+</div>
+{cards}
+</section>
 </div>
 """
         return self.html_page("Membership WebApp", body)
 
     def render_member_card(self, record: MemberRecord, selected_id: int | None = None, csrf_token: str = "") -> str:
-        selected = " style='border-color:#2f7cf6;background:#f8fbff'" if selected_id == record.id else ""
+        selected = " selected" if selected_id == record.id else ""
         return f"""
-<div class='member'{selected}>
-  <div><strong>{html.escape(record.display_name or 'Unnamed member')}</strong> <span class='muted'>#{html.escape(record.membership_number or 'N/A')}</span></div>
-  <div class='muted'>{html.escape(record.membership_type or 'Unknown')} | Email: {html.escape(record.email or 'No email')} | Cart: {html.escape(parse_yes_no(record.includes_cart))} | Range: {html.escape(parse_yes_no(record.includes_range))} | Used: {record.membership_amount_used}</div>
-  <div class='muted'>Sheet: {html.escape(record.source_sheet or '')} row {record.source_row}</div>
-  <div class='row' style='margin-top:10px'>
-    <form method='get' action='/'><input type='hidden' name='member' value='{record.id}'><input type='hidden' name='q' value='{html.escape(record.display_name)}'><button type='submit' class='secondary'>Edit</button></form>
-    <form method='post' action='/members/{record.id}/usage'>{self.render_form_token(csrf_token)}<input type='hidden' name='delta' value='1'><button type='submit'>+1 Usage</button></form>
-    <form method='post' action='/members/{record.id}/usage'>{self.render_form_token(csrf_token)}<input type='hidden' name='delta' value='-1'><button type='submit' class='secondary'>-1 Usage</button></form>
-  </div>
-  <form method='post' action='/members/{record.id}/update' style='margin-top:12px'>
-    {self.render_form_token(csrf_token)}
-    <div class='grid'>
-      <div class='field'><label>First Name</label><input name='first_name' value='{html.escape(record.first_name)}'></div>
-      <div class='field'><label>Last Name</label><input name='last_name' value='{html.escape(record.last_name)}'></div>
-      <div class='field'><label>Email</label><input name='email' value='{html.escape(record.email)}'></div>
-      <div class='field'><label>Membership Type</label><input name='membership_type' value='{html.escape(record.membership_type)}'></div>
-      <div class='field'><label>Price Paid</label><input name='price_paid' value='{html.escape(record.price_paid)}'></div>
-      <div class='field'><label>Membership Number</label><input name='membership_number' value='{html.escape(record.membership_number)}'></div>
-      <div class='field'><label>Includes Cart</label><select name='includes_cart'><option {'selected' if parse_yes_no(record.includes_cart)=='Yes' else ''}>Yes</option><option {'selected' if parse_yes_no(record.includes_cart)=='No' else ''}>No</option></select></div>
-      <div class='field'><label>Includes Range</label><select name='includes_range'><option {'selected' if parse_yes_no(record.includes_range)=='Yes' else ''}>Yes</option><option {'selected' if parse_yes_no(record.includes_range)=='No' else ''}>No</option></select></div>
-      <div class='field'><label>Membership Amount Used</label><input name='membership_amount_used' value='{record.membership_amount_used}'></div>
-    </div>
-    <div class='row' style='margin-top:10px'><button type='submit'>Save Changes</button></div>
-  </form>
+<div class='member-card{selected}'>
+<div class='member-name'>{html.escape(record.display_name or 'Unnamed member')} <span style='color:var(--gray-400);font-weight:400;font-size:14px'>#{html.escape(record.membership_number or 'N/A')}</span></div>
+<div class='member-meta'>{html.escape(record.membership_type or 'Unknown Type')}</div>
+<div class='member-details'>
+<div class='member-detail'><span class='member-detail-label'>📧</span><span class='member-detail-value'>{html.escape(record.email or 'No email')}</span></div>
+<div class='member-detail'><span class='member-detail-label'>🛒</span><span class='member-detail-value'>Cart: {html.escape(parse_yes_no(record.includes_cart))}</span></div>
+<div class='member-detail'><span class='member-detail-label'>🎯</span><span class='member-detail-value'>Range: {html.escape(parse_yes_no(record.includes_range))}</span></div>
+<div class='member-detail'><span class='member-detail-label'>📊</span><span class='member-detail-value'>Used: {record.membership_amount_used}</span></div>
+</div>
+<div class='member-actions'>
+<form method='get' action='/'><input type='hidden' name='member' value='{record.id}'><input type='hidden' name='q' value='{html.escape(record.display_name)}'><button type='submit' class='btn btn-secondary btn-sm'>✏️ Edit</button></form>
+<form method='post' action='/members/{record.id}/usage'>{self.render_form_token(csrf_token)}<input type='hidden' name='delta' value='1'><button type='submit' class='btn btn-primary btn-sm'>➕ Usage</button></form>
+<form method='post' action='/members/{record.id}/usage'>{self.render_form_token(csrf_token)}<input type='hidden' name='delta' value='-1'><button type='submit' class='btn btn-secondary btn-sm'>➖ Usage</button></form>
+</div>
+<div class='member-edit-form'>
+<form method='post' action='/members/{record.id}/update'>
+{self.render_form_token(csrf_token)}
+<div class='form-row'>
+<div class='form-group'><label class='form-label'>First Name</label><input name='first_name' class='form-input' value='{html.escape(record.first_name)}'></div>
+<div class='form-group'><label class='form-label'>Last Name</label><input name='last_name' class='form-input' value='{html.escape(record.last_name)}'></div>
+<div class='form-group'><label class='form-label'>Email</label><input name='email' class='form-input' value='{html.escape(record.email)}'></div>
+<div class='form-group'><label class='form-label'>Membership Type</label><input name='membership_type' class='form-input' value='{html.escape(record.membership_type)}'></div>
+<div class='form-group'><label class='form-label'>Price Paid</label><input name='price_paid' class='form-input' value='{html.escape(record.price_paid)}'></div>
+<div class='form-group'><label class='form-label'>Membership Number</label><input name='membership_number' class='form-input' value='{html.escape(record.membership_number)}'></div>
+<div class='form-group'><label class='form-label'>Includes Cart</label><select name='includes_cart' class='form-select'><option {'selected' if parse_yes_no(record.includes_cart)=='Yes' else ''}>Yes</option><option {'selected' if parse_yes_no(record.includes_cart)=='No' else ''}>No</option></select></div>
+<div class='form-group'><label class='form-label'>Includes Range</label><select name='includes_range' class='form-select'><option {'selected' if parse_yes_no(record.includes_range)=='Yes' else ''}>Yes</option><option {'selected' if parse_yes_no(record.includes_range)=='No' else ''}>No</option></select></div>
+<div class='form-group'><label class='form-label'>Amount Used</label><input name='membership_amount_used' class='form-input' value='{record.membership_amount_used}' type='number'></div>
+</div>
+<div class='form-actions'><button type='submit' class='btn btn-primary btn-sm'>💾 Save Changes</button></div>
+</form>
+</div>
 </div>
 """
 
@@ -793,39 +934,52 @@ button.danger{{background:#d9534f}}
             csrf_token = handler.get_csrf_token()
             handler.respond_bytes(self.render_dashboard(q=q, member_id=member_id, message=message, csrf_token=csrf_token))
             return
-        if parsed.path == "/sync" and handler.command == "POST":
-            status, target = self._handle_sync_request(handler)
-            handler.send_response(status)
-            if status == HTTPStatus.SEE_OTHER:
-                handler.send_header("Location", target)
-                handler.end_headers()
+        try:
+            if parsed.path == "/sync" and handler.command == "POST":
+                status, target = self._handle_sync_request(handler)
+                handler.send_response(status)
+                if status == HTTPStatus.SEE_OTHER:
+                    handler.send_header("Location", target)
+                    handler.end_headers()
+                    return
+                handler.respond_text(str(target), status=status)
                 return
-            handler.respond_text(str(target), status=status)
+            if parsed.path == "/members/create" and handler.command == "POST":
+                self._handle_create_request(handler)
+                return
+            if parsed.path.endswith("/update") and handler.command == "POST":
+                self._handle_update_request(handler, parsed.path)
+                return
+            if parsed.path.endswith("/usage") and handler.command == "POST":
+                self._handle_usage_request(handler, parsed.path)
+                return
+            if parsed.path == "/export/sqlite" and handler.command == "GET":
+                self._handle_export_request(handler)
+                return
+        except PermissionError as exc:
+            handler.respond_text(str(exc), status=HTTPStatus.FORBIDDEN)
             return
-        if parsed.path.endswith("/update") and handler.command == "POST":
-            self._handle_update_request(handler, parsed.path)
-            return
-        if parsed.path.endswith("/usage") and handler.command == "POST":
-            self._handle_usage_request(handler, parsed.path)
+        except Exception as exc:
+            handler.respond_text(f"Request failed: {exc}", status=HTTPStatus.BAD_REQUEST)
             return
         handler.respond_text("Not found", status=HTTPStatus.NOT_FOUND)
 
-    def _handle_sync_request(self, handler: BaseHTTPRequestHandler) -> tuple[int, str]:
-        self._validate_csrf(handler)
+    def _handle_sync_request(self, handler: AuthenticatedHandler) -> tuple[int, str]:
         form = parse_multipart_form(handler)
+        self._validate_csrf(handler, form)
         upload = form.get("workbook")
         if not upload:
             return HTTPStatus.BAD_REQUEST, "Missing workbook upload."
         filename, data = upload
         return self.handle_sync((filename, data))
 
-    def _handle_update_request(self, handler: BaseHTTPRequestHandler, path: str) -> None:
+    def _handle_update_request(self, handler: AuthenticatedHandler, path: str) -> None:
         member_id = extract_member_id(path)
         if member_id is None:
             handler.respond_text("Invalid member id", status=HTTPStatus.BAD_REQUEST)
             return
-        self._validate_csrf(handler)
         form = parse_multipart_form(handler)
+        self._validate_csrf(handler, form)
         try:
             updated = self.db.update_record(
                 member_id,
@@ -848,13 +1002,13 @@ button.danger{{background:#d9534f}}
         except Exception as exc:
             handler.respond_text(f"Save error: {exc}", status=HTTPStatus.BAD_REQUEST)
 
-    def _handle_usage_request(self, handler: BaseHTTPRequestHandler, path: str) -> None:
+    def _handle_usage_request(self, handler: AuthenticatedHandler, path: str) -> None:
         member_id = extract_member_id(path)
         if member_id is None:
             handler.respond_text("Invalid member id", status=HTTPStatus.BAD_REQUEST)
             return
-        self._validate_csrf(handler)
         form = parse_multipart_form(handler)
+        self._validate_csrf(handler, form)
         try:
             delta = int(str(form.get("delta", "1")).strip())
         except ValueError:
@@ -865,9 +1019,48 @@ button.danger{{background:#d9534f}}
         handler.send_header("Location", f"/?member={updated.id}&message={urlencode({'message': 'Usage updated.'})[8:]}")
         handler.end_headers()
 
-    def _validate_csrf(self, handler: BaseHTTPRequestHandler) -> None:
-        token = handler.get_csrf_token()
+    def _handle_create_request(self, handler: AuthenticatedHandler) -> None:
         form = parse_multipart_form(handler)
+        self._validate_csrf(handler, form)
+        try:
+            status, record = self.db.upsert_new_member(
+                {
+                    "first_name": form.get("first_name", ""),
+                    "last_name": form.get("last_name", ""),
+                    "email": form.get("email", ""),
+                    "membership_type": form.get("membership_type", ""),
+                    "price_paid": form.get("price_paid", ""),
+                    "membership_number": form.get("membership_number", ""),
+                    "includes_cart": form.get("includes_cart", "No"),
+                    "includes_range": form.get("includes_range", "No"),
+                    "membership_amount_used": form.get("membership_amount_used", "0"),
+                    "source_sheet": "manual",
+                    "source_row": 0,
+                }
+            )
+            self.audit.log("member_created", {"member_id": record.id, "membership_number": record.membership_number})
+            handler.send_response(HTTPStatus.SEE_OTHER)
+            handler.send_header("Location", f"/?member={record.id}&message={urlencode({'message': 'Member created.'})[8:]}")
+            handler.end_headers()
+        except Exception as exc:
+            handler.respond_text(f"Create error: {exc}", status=HTTPStatus.BAD_REQUEST)
+
+    def _handle_export_request(self, handler: BaseHTTPRequestHandler) -> None:
+        path = self.db.db_path
+        if not path.exists():
+            handler.respond_text("Database not found.", status=HTTPStatus.NOT_FOUND)
+            return
+        data = path.read_bytes()
+        handler.send_response(HTTPStatus.OK)
+        handler._secure_headers()
+        handler.send_header("Content-Type", "application/x-sqlite3")
+        handler.send_header("Content-Disposition", 'attachment; filename="members.sqlite3"')
+        handler.send_header("Content-Length", str(len(data)))
+        handler.end_headers()
+        handler.wfile.write(data)
+
+    def _validate_csrf(self, handler: AuthenticatedHandler, form: dict[str, str | bytes | tuple[str, bytes]]) -> None:
+        token = getattr(handler, "_csrf_token", None)
         form_token = str(form.get("csrf_token", ""))
         if not token or form_token != token:
             raise PermissionError("CSRF validation failed.")
@@ -949,8 +1142,10 @@ class AuthenticatedHandler(BaseHTTPRequestHandler):
         cookie = SimpleCookie(self.headers.get("Cookie", ""))
         token = cookie.get(self._csrf_cookie_name())
         if token and token.value:
+            self._csrf_token = token.value  # type: ignore[attr-defined]
             return token.value
         value = secrets.token_urlsafe(32)
+        self._csrf_token = value  # type: ignore[attr-defined]
         self._set_csrf_cookie = value  # type: ignore[attr-defined]
         return value
 
