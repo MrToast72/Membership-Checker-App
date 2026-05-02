@@ -80,6 +80,16 @@ Run the membership checker as a web app with Docker Compose:
 docker compose up --build
 ```
 
+By default the compose file builds directly from GitHub. To build from your local checkout instead:
+
+```bash
+MEMBERSHIP_BUILD_CONTEXT=. docker compose up --build
+```
+
+The compose file includes Traefik labels and attaches to the external `traefik` network for
+`https://member.cyberconnectit.com`. Ensure the network exists (and Traefik is running), or remove the
+labels/network if you are not using Traefik.
+
 Then open `http://localhost:8000` (or route the container through your reverse proxy so it is served via
 `https://member.cyberconnectit.com`).
 
