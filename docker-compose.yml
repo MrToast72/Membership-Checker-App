@@ -1,7 +1,7 @@
 services:
   web:
     build:
-      context: ${MEMBERSHIP_BUILD_CONTEXT:-https://github.com/MrToast72/Membership-Checker-App.git}
+      context: ${MEMBERSHIP_BUILD_CONTEXT:-https://github.com/MrToast72/Membership-Checker-App.git#main}
       dockerfile: Dockerfile
     container_name: membership-webapp
     ports:
@@ -15,7 +15,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      - "traefik.http.routers.member-web.rule=Host(`member.cyberconnectit.com`)"
+      - "traefik.http.routers.member-web.rule=Host(`${MEMBERSHIP_HOSTNAME:-member.cyberconnectit.com}`)"
       - "traefik.http.routers.member-web.entrypoints=websecure"
       - "traefik.http.routers.member-web.tls.certresolver=cloudflare"
       - "traefik.http.services.member-web.loadbalancer.server.port=8000"
