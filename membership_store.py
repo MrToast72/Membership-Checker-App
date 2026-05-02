@@ -70,7 +70,7 @@ class ExcelMembershipLoader:
         "membership_type": {"membershiptype"},
         "membership_number": {"membershipnumber", "membernumber"},
         "membership_amount_used": {"membershipamountused", "amountused", "membershipused"},
-        "includes_cart": {"includescart", "incldescart", "includescart", "includecart"},
+        "includes_cart": {"includescart", "incldescart", "includecart"},
         "includes_range": {"includesrange", "includerange"},
     }
 
